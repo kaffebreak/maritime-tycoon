@@ -200,6 +200,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   totalRevenue: 0,
   totalCosts: 0,
   completedContracts: 0,
+  
+  // NPC and ranking system
+  npcCompanies: [],
+  rankings: [],
+  marketNews: [],
+  reputation: 50,
 
   initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard') => {
     const difficultySettings = {
@@ -242,7 +248,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
       founderName: founderName || '',
       fleet: [starterShip],
       contracts: initialContracts,
+      npcCompanies: [],
+      rankings: [],
+      marketNews: [],
+      reputation: 50,
     });
+    
+    // Initialize NPC companies after setting initial state
+    get().initializeNPCCompanies();
   },
 
   setGameSpeed: (speed) => {
