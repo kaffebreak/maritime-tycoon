@@ -702,8 +702,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                     fuel: voyage.costs.fuel * (impact.fuelMultiplier || 1),
                     total: voyage.costs.total * (impact.costMultiplier || 1),
                   },
-                } : voyage
-              ),
+                } : voyage;
+              }),
             }));
           }
         }
