@@ -301,7 +301,9 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
             <button
               onClick={() => {
                 const ship = availableShips[0];
-                assignContract(contract.id, ship.id);
+                if (ship && contract.status === 'available') {
+                  assignContract(contract.id, ship.id);
+                }
               }}
               className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                 profit <= 0 
@@ -310,8 +312,10 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
                   ? 'bg-purple-600 text-white hover:bg-purple-700'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
+              disabled={contract.status !== 'available'}
             >
-              {profit <= 0 ? '⚠️ 赤字契約を受ける' : 
+              {contract.status !== 'available' ? '契約済み' :
+               profit <= 0 ? '⚠️ 赤字契約を受ける' : 
                contract.contractType === 'long_term' ? '長期契約を受ける' : '契約を受ける'}
             </button>
             <div className="text-xs text-slate-600 mt-1">

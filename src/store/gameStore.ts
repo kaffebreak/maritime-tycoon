@@ -385,12 +385,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
           return currentMargin > bestMargin ? current : best;
         });
 
-        get().assignContract(bestContract.id, ship.id);
+        // Double-check contract is still available before assigning
+        const currentState = get();
+        const stillAvailable = currentState.contracts.find(c => c.id === bestContract.id && c.status === 'available');
+        if (stillAvailable) {
+          get().assignContract(bestContract.id, ship.id);
+        }
       }
     });
   },
 
   assignContract: (contractId, shipId) => {
+    const state = get();
+    const contract = state.contracts.find(c => c.id === contractId);
+    const ship = state.fleet.find(s => s.id === shipId);
+    
+    // Check if contract is still available and ship is idle
+    if (!contract || contract.status !== 'available' || !ship || ship.status !== 'idle') {
+      return; // Contract already taken or ship not available
+    }
+
     set(prevState => ({
       contracts: prevState.contracts.map(c =>
         c.id === contractId ? { ...c, status: 'assigned' as const } : c
