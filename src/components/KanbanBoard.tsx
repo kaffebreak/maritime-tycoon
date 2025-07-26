@@ -457,11 +457,6 @@ export const KanbanBoard: React.FC = () => {
   const availableContracts = contracts.filter(c => {
     if (c.status !== 'available') return false;
     if (contractTypeFilter !== 'all' && c.contractType !== contractTypeFilter) return false;
-    
-    // Filter out expired contracts
-    const remainingDays = c.expiresDay - (simulationDay - c.createdDay);
-    if (remainingDays <= 0) return false;
-    
     return true;
   });
   const assignedPairs = activeVoyages.map(v => ({
@@ -636,7 +631,7 @@ export const KanbanBoard: React.FC = () => {
                     )}
                     
                     <div className="text-xs text-slate-500 mt-2">
-                      {contract.distanceNm.toFixed(0)} nm • 期限まで{Math.max(0, contract.expiresDay - (simulationDay - contract.createdDay))}日
+                      {contract.distanceNm.toFixed(0)} nm • 期限まで{Math.max(0, contract.expiresDay - (useGameStore.getState().simulationDay - contract.createdDay))}日
                     </div>
                   </div>
                 );
