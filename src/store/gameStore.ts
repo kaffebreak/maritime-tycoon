@@ -892,6 +892,184 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return { fuel, port, cargo, maintenance, insurance, total };
   },
 
+  initializeNPCCompanies: () => {
+    const state = get();
+    const numNPCs = Math.min(5, NPC_COMPANY_NAMES.length);
+    const selectedCompanies = NPC_COMPANY_NAMES.slice(0, numNPCs);
+    const strategies: NPCStrategy[] = ['aggressive', 'conservative', 'balanced', 'opportunistic', 'balanced'];
+    
+    const npcCompanies = selectedCompanies.map((company, index) => ({
+      id: uuidv4(),
+      name: company.name,
+      founderName: company.founder,
+      type: 'npc' as const,
+      strategy: strategies[index],
+      cash: state.cash * (0.5 + Math.random() * 0.5), // 50-100% of player's starting cash
+      reputation: 40 + Math.random() * 20, // 40-60 reputation
+      fleetSize: 1 + Math.floor(Math.random() * 2), // 1-2 ships
+      totalRevenue: 0,
+      totalCosts: 0,
+      completedContracts: 0,
+      marketShare: 0,
+      lastAction: 'Company founded',
+      founded: state.simulationDay,
+      color: company.color,
+    }));
+    
+    set({ npcCompanies });
+  },
+
+  simulateNPCActions: () => {
+    const state = get();
+    
+    state.npcCompanies.forEach(npc => {
+      const strategy = NPC_STRATEGIES[npc.strategy];
+      
+      // Simulate contract completion and revenue
+      if (Math.random() < 0.1) { // 10% chance per day to complete a contract
+        const revenue = 500000 + Math.random() * 1000000; // Random revenue
+        const costs = revenue * (0.6 + Math.random() * 0.2); // 60-80% cost ratio
+        
+        set(prevState => ({
+          npcCompanies: prevState.npcCompanies.map(company =>
+            company.id === npc.id
+              ? {
+                  ...company,
+                  totalRevenue: company.totalRevenue + revenue,
+                  totalCosts: company.totalCosts + costs,
+                  cash: company.cash + (revenue - costs),
+                  completedContracts: company.completedContracts + 1,
+                  reputation: Math.min(100, company.reputation + 0.5),
+                  lastAction: 'Completed voyage',
+                }
+              : company
+          ),
+        }));
+        
+        // Generate market news
+        if (Math.random() < 0.3) {
+          get().generateMarketNews('contract_win', npc.id, `${npc.name} secured a major shipping contract`);
+        }
+      }
+      
+      // Simulate fleet expansion
+      if (Math.random() < strategy.expansionRate * 0.01 && npc.cash > 20000000) { // Expansion chance
+        const shipCost = 15000000 + Math.random() * 50000000;
+        if (npc.cash >= shipCost) {
+          set(prevState => ({
+            npcCompanies: prevState.npcCompanies.map(company =>
+              company.id === npc.id
+                ? {
+                    ...company,
+                    cash: company.cash - shipCost,
+                    fleetSize: company.fleetSize + 1,
+                    lastAction: 'Expanded fleet',
+                  }
+                : company
+            ),
+          }));
+          
+          get().generateMarketNews('company_expansion', npc.id, `${npc.name} adds new vessel to fleet`);
+        }
+      }
+      
+      // Simulate market competition (reduce available contracts)
+      if (Math.random() < strategy.contractSelectivity) {
+        const availableContracts = state.contracts.filter(c => c.status === 'available');
+        if (availableContracts.length > 0) {
+          const contractToTake = availableContracts[Math.floor(Math.random() * availableContracts.length)];
+          
+          set(prevState => ({
+            contracts: prevState.contracts.map(c =>
+              c.id === contractToTake.id ? { ...c, status: 'assigned' as const } : c
+            ),
+          }));
+        }
+      }
+    });
+  },
+
+  updateRankings: () => {
+    const state = get();
+    
+    // Calculate player metrics
+    const playerProfit = state.totalRevenue - state.totalCosts;
+    const playerScore = (
+      playerProfit * 0.4 +
+      state.reputation * 10000 +
+      state.fleet.length * 50000 +
+      state.completedContracts * 10000
+    );
+    
+    // Create ranking entries
+    const allCompanies = [
+      {
+        companyId: 'player',
+        companyName: state.companyName || 'Your Company',
+        score: playerScore,
+        metrics: {
+          revenue: state.totalRevenue,
+          profit: playerProfit,
+          fleetSize: state.fleet.length,
+          reputation: state.reputation,
+          marketShare: 0, // Will be calculated
+        },
+      },
+      ...state.npcCompanies.map(npc => ({
+        companyId: npc.id,
+        companyName: npc.name,
+        score: (
+          (npc.totalRevenue - npc.totalCosts) * 0.4 +
+          npc.reputation * 10000 +
+          npc.fleetSize * 50000 +
+          npc.completedContracts * 10000
+        ),
+        metrics: {
+          revenue: npc.totalRevenue,
+          profit: npc.totalRevenue - npc.totalCosts,
+          fleetSize: npc.fleetSize,
+          reputation: npc.reputation,
+          marketShare: 0, // Will be calculated
+        },
+      })),
+    ];
+    
+    // Sort by score and assign ranks
+    allCompanies.sort((a, b) => b.score - a.score);
+    
+    // Calculate market share
+    const totalRevenue = allCompanies.reduce((sum, company) => sum + company.metrics.revenue, 0);
+    allCompanies.forEach(company => {
+      company.metrics.marketShare = totalRevenue > 0 ? (company.metrics.revenue / totalRevenue) * 100 : 0;
+    });
+    
+    const rankings = allCompanies.map((company, index) => {
+      const previousRank = state.rankings.find(r => r.companyId === company.companyId)?.rank || index + 1;
+      return {
+        ...company,
+        rank: index + 1,
+        change: previousRank - (index + 1), // Positive = moved up, negative = moved down
+      };
+    });
+    
+    set({ rankings });
+  },
+
+  generateMarketNews: (type, companyId, message) => {
+    const state = get();
+    const newsItem = {
+      id: uuidv4(),
+      type: type as any,
+      companyId,
+      message,
+      day: state.simulationDay,
+      impact: 'neutral' as const,
+    };
+    
+    set(prevState => ({
+      marketNews: [newsItem, ...prevState.marketNews.slice(0, 19)], // Keep last 20 news items
+    }));
+  },
   formatCurrency: (amount) => {
     return new Intl.NumberFormat('ja-JP', {
       style: 'currency',

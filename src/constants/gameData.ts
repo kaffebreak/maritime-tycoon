@@ -342,6 +342,44 @@ export const ACHIEVEMENTS_DATA = [
   },
 ];
 
+export const NPC_COMPANY_NAMES = [
+  { name: 'Pacific Maritime Corp', founder: 'John Anderson', color: '#EF4444' },
+  { name: 'Global Shipping Lines', founder: 'Maria Rodriguez', color: '#10B981' },
+  { name: 'Ocean Express Ltd', founder: 'Chen Wei', color: '#8B5CF6' },
+  { name: 'Atlantic Cargo Co', founder: 'Ahmed Hassan', color: '#F59E0B' },
+  { name: 'Nordic Shipping AS', founder: 'Lars Eriksson', color: '#06B6D4' },
+  { name: 'Mediterranean Lines', founder: 'Giuseppe Romano', color: '#EC4899' },
+  { name: 'Asia Pacific Fleet', founder: 'Hiroshi Tanaka', color: '#84CC16' },
+  { name: 'European Maritime', founder: 'Klaus Mueller', color: '#6366F1' },
+];
+
+export const NPC_STRATEGIES = {
+  aggressive: {
+    contractSelectivity: 0.3, // accepts 30% of available contracts
+    profitMarginThreshold: 5, // accepts low-margin contracts
+    expansionRate: 0.8, // high ship purchase rate
+    riskTolerance: 0.9,
+  },
+  conservative: {
+    contractSelectivity: 0.1, // accepts 10% of available contracts
+    profitMarginThreshold: 25, // only high-margin contracts
+    expansionRate: 0.2, // low ship purchase rate
+    riskTolerance: 0.3,
+  },
+  balanced: {
+    contractSelectivity: 0.2, // accepts 20% of available contracts
+    profitMarginThreshold: 15, // moderate profit margins
+    expansionRate: 0.5, // moderate expansion
+    riskTolerance: 0.6,
+  },
+  opportunistic: {
+    contractSelectivity: 0.4, // accepts 40% of available contracts
+    profitMarginThreshold: 10, // flexible on margins
+    expansionRate: 0.6, // adapts to market conditions
+    riskTolerance: 0.7,
+  },
+};
+
 // Distance calculation helper (simplified great circle)
 export const calculateDistance = (port1: Port, port2: Port): number => {
   const R = 3440.065; // Earth radius in nautical miles
