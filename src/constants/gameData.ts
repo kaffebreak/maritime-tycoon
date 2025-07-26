@@ -2,6 +2,8 @@ import { Port, ShipSpec, CostFactors, CargoType } from '../types/game';
 
 export const INITIAL_CASH = 15_000_000; // 15M USD - More realistic startup capital
 export const SIMULATION_TICK_MS = 3000; // 3 seconds = 1 game day at 1x speed (slower pace)
+export const DAYS_PER_MONTH = 30;
+export const DAYS_PER_YEAR = 365;
 
 export const COST_FACTORS: CostFactors = {
   fuel: {
@@ -22,6 +24,18 @@ export const COST_FACTORS: CostFactors = {
   },
   maintenanceRate: 0.005, // 0.5% of build cost per year
   insuranceRate: 0.008,   // 0.8% of build cost per year
+};
+
+export const CREW_COSTS = {
+  captain: 300,    // USD per day
+  engineer: 200,   // USD per day
+  sailor: 150,     // USD per day
+};
+
+export const MAINTENANCE_INTERVALS = {
+  minor: 90,       // days
+  major: 365,      // days
+  drydock: 1825,   // days (5 years)
 };
 
 export const SAMPLE_PORTS: Port[] = [
@@ -45,6 +59,14 @@ export const SAMPLE_PORTS: Port[] = [
         Passenger: 25,
       },
     },
+    congestion: 75,
+    facilities: {
+      cranes: 12,
+      storage: 50000,
+      fuel: true,
+      repair: true,
+    },
+    weatherRisk: 20,
   },
   {
     LOCODE: 'CNSHA',
@@ -66,6 +88,14 @@ export const SAMPLE_PORTS: Port[] = [
         Passenger: 20,
       },
     },
+    congestion: 85,
+    facilities: {
+      cranes: 20,
+      storage: 80000,
+      fuel: true,
+      repair: true,
+    },
+    weatherRisk: 15,
   },
   {
     LOCODE: 'SGSIN',
@@ -87,6 +117,14 @@ export const SAMPLE_PORTS: Port[] = [
         Passenger: 22,
       },
     },
+    congestion: 60,
+    facilities: {
+      cranes: 15,
+      storage: 60000,
+      fuel: true,
+      repair: true,
+    },
+    weatherRisk: 25,
   },
   {
     LOCODE: 'USNYC',
@@ -108,6 +146,14 @@ export const SAMPLE_PORTS: Port[] = [
         Passenger: 30,
       },
     },
+    congestion: 70,
+    facilities: {
+      cranes: 10,
+      storage: 45000,
+      fuel: true,
+      repair: false,
+    },
+    weatherRisk: 30,
   },
   {
     LOCODE: 'USLAX',
@@ -129,6 +175,14 @@ export const SAMPLE_PORTS: Port[] = [
         Passenger: 28,
       },
     },
+    congestion: 65,
+    facilities: {
+      cranes: 14,
+      storage: 55000,
+      fuel: true,
+      repair: true,
+    },
+    weatherRisk: 35,
   },
   {
     LOCODE: 'DEHAM',
@@ -150,6 +204,14 @@ export const SAMPLE_PORTS: Port[] = [
         Passenger: 25,
       },
     },
+    congestion: 55,
+    facilities: {
+      cranes: 8,
+      storage: 40000,
+      fuel: true,
+      repair: true,
+    },
+    weatherRisk: 40,
   },
 ];
 
@@ -163,6 +225,8 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     speedKt: 22,
     fuelBurn100nm: 45,
     buildCost: 180_000_000, // Increased cost
+    reliability: 85,
+    fuelEfficiency: 1.0,
   },
   {
     id: 'FEEDER-1',
@@ -173,6 +237,8 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     speedKt: 18,
     fuelBurn100nm: 12,
     buildCost: 35_000_000, // Increased cost
+    reliability: 90,
+    fuelEfficiency: 1.1,
   },
   {
     id: 'PCTC-1',
@@ -183,6 +249,8 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     speedKt: 20,
     fuelBurn100nm: 35,
     buildCost: 95_000_000, // Increased cost
+    reliability: 88,
+    fuelEfficiency: 1.05,
   },
   {
     id: 'VLCC-1',
@@ -193,6 +261,8 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     speedKt: 16,
     fuelBurn100nm: 55,
     buildCost: 140_000_000, // Increased cost
+    reliability: 82,
+    fuelEfficiency: 0.95,
   },
   {
     id: 'BULK-1',
@@ -203,6 +273,8 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     speedKt: 14,
     fuelBurn100nm: 40,
     buildCost: 75_000_000, // Increased cost
+    reliability: 87,
+    fuelEfficiency: 1.02,
   },
 ];
 
@@ -227,6 +299,48 @@ export const DIFFICULTY_MULTIPLIERS = {
   Normal: { probability: 1.0, effect: 1.0 },
   Hard: { probability: 2.0, effect: 1.5 },
 };
+
+export const SEASONAL_DEMAND_MULTIPLIERS = {
+  spring: { Container: 1.1, Car: 1.2, Bulk: 1.0, Oil: 0.9, Passenger: 1.3 },
+  summer: { Container: 1.2, Car: 1.0, Bulk: 1.1, Oil: 1.0, Passenger: 1.5 },
+  autumn: { Container: 1.3, Car: 1.1, Bulk: 1.2, Oil: 1.1, Passenger: 1.0 },
+  winter: { Container: 1.0, Car: 0.9, Bulk: 0.9, Oil: 1.2, Passenger: 0.8 },
+};
+
+export const ACHIEVEMENTS_DATA = [
+  {
+    id: 'first_voyage',
+    type: 'first_voyage' as const,
+    title: '処女航海',
+    description: '初めての航海を完了する',
+    requirement: 1,
+    reward: { cash: 100000, reputation: 5 },
+  },
+  {
+    id: 'profit_1m',
+    type: 'profit_milestone' as const,
+    title: '百万長者',
+    description: '累計利益100万ドルを達成',
+    requirement: 1000000,
+    reward: { cash: 500000, reputation: 10 },
+  },
+  {
+    id: 'fleet_5',
+    type: 'fleet_size' as const,
+    title: '小艦隊',
+    description: '5隻の船舶を保有',
+    requirement: 5,
+    reward: { cash: 1000000, reputation: 15 },
+  },
+  {
+    id: 'route_master',
+    type: 'route_master' as const,
+    title: '航路の達人',
+    description: '100回の航海を完了',
+    requirement: 100,
+    reward: { cash: 2000000, reputation: 20 },
+  },
+];
 
 // Distance calculation helper (simplified great circle)
 export const calculateDistance = (port1: Port, port2: Port): number => {

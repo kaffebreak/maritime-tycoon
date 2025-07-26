@@ -524,6 +524,264 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }));
   },
 
+  triggerGlobalEvents: () => {
+    const state = get();
+    
+    // Seasonal events
+    const dayOfYear = state.simulationDay % 365;
+    const newSeason = dayOfYear < 91 ? 'spring' :
+                     dayOfYear < 182 ? 'summer' :
+                     dayOfYear < 273 ? 'autumn' : 'winter';
+    
+    if (newSeason !== state.marketConditions.season) {
+      const seasonalEvent: GlobalEvent = {
+        id: uuidv4(),
+        type: 'seasonal_demand',
+        title: `${newSeason === 'spring' ? '春' : newSeason === 'summer' ? '夏' : newSeason === 'autumn' ? '秋' : '冬'}の需要変動`,
+        description: `季節の変化により貨物需要が変動しています`,
+        startDay: state.simulationDay,
+        duration: 90,
+        effects: {
+          demandMultiplier: SEASONAL_DEMAND_MULTIPLIERS[newSeason],
+        },
+      };
+      
+      set(prevState => ({
+        newGlobalEvents: [...prevState.newGlobalEvents, seasonalEvent],
+        marketConditions: {
+          ...prevState.marketConditions,
+          season: newSeason,
+          demandMultipliers: SEASONAL_DEMAND_MULTIPLIERS[newSeason],
+        },
+      }));
+    }
+    
+    // Economic events
+    if (Math.random() < 0.002) { // 0.2% chance per day
+      const isPositive = Math.random() > 0.5;
+      const economicEvent: GlobalEvent = {
+        id: uuidv4(),
+        type: isPositive ? 'economic_boom' : 'recession',
+        title: isPositive ? '経済好況' : '経済不況',
+        description: isPositive ? '世界経済の好況により貨物需要が増加' : '経済不況により貨物需要が減少',
+        startDay: state.simulationDay,
+        duration: 60,
+        effects: {
+          demandMultiplier: isPositive ? 
+            { Container: 1.3, Car: 1.2, Bulk: 1.1, Oil: 1.1, Passenger: 1.4 } :
+            { Container: 0.8, Car: 0.7, Bulk: 0.9, Oil: 0.9, Passenger: 0.6 },
+        },
+      };
+      
+      set(prevState => ({
+        newGlobalEvents: [...prevState.newGlobalEvents, economicEvent],
+      }));
+    }
+  },
+
+  updateMarketConditions: () => {
+    const state = get();
+    
+    // Update fuel prices based on global events
+    let fuelMultiplier = 1.0;
+    state.newGlobalEvents.forEach(event => {
+      if (event.effects.fuelPriceMultiplier) {
+        fuelMultiplier *= event.effects.fuelPriceMultiplier;
+      }
+    });
+    
+    set(prevState => ({
+      marketConditions: {
+        ...prevState.marketConditions,
+        fuelPrices: {
+          VLSFO: COST_FACTORS.fuel.VLSFO * fuelMultiplier,
+          HFO: COST_FACTORS.fuel.HFO * fuelMultiplier,
+          trend: fuelMultiplier > 1.1 ? 'rising' : fuelMultiplier < 0.9 ? 'falling' : 'stable',
+        },
+      },
+      fuelPrice: COST_FACTORS.fuel.VLSFO * fuelMultiplier,
+    }));
+  },
+
+  checkAchievements: () => {
+    const state = get();
+    
+    set(prevState => ({
+      achievements: prevState.achievements.map(achievement => {
+        if (achievement.unlocked) return achievement;
+        
+        let progress = 0;
+        switch (achievement.type) {
+          case 'first_voyage':
+            progress = state.completedContracts;
+            break;
+          case 'profit_milestone':
+            progress = state.totalRevenue - state.totalCosts;
+            break;
+          case 'fleet_size':
+            progress = state.fleet.length;
+            break;
+          case 'route_master':
+            progress = state.completedContracts;
+            break;
+        }
+        
+        const unlocked = progress >= achievement.requirement;
+        
+        if (unlocked && !achievement.unlocked) {
+          // Award achievement rewards
+          setTimeout(() => {
+            if (achievement.reward.cash) {
+              set(prev => ({ cash: prev.cash + (achievement.reward.cash || 0) }));
+            }
+            if (achievement.reward.reputation) {
+              set(prev => ({ reputation: Math.min(100, prev.reputation + (achievement.reward.reputation || 0)) }));
+            }
+          }, 100);
+        }
+        
+        return { ...achievement, progress, unlocked };
+      }),
+    }));
+  },
+
+  unlockAchievement: (achievementId) => {
+    set(prevState => ({
+      achievements: prevState.achievements.map(a =>
+        a.id === achievementId ? { ...a, unlocked: true } : a
+      ),
+    }));
+  },
+
+  payTaxes: () => {
+    const state = get();
+    const profit = state.totalRevenue - state.totalCosts;
+    const taxOwed = Math.max(0, profit * state.finances.taxes.rate);
+    
+    set(prevState => ({
+      cash: prevState.cash - taxOwed,
+      finances: {
+        ...prevState.finances,
+        taxes: {
+          ...prevState.finances.taxes,
+          lastPaid: state.simulationDay,
+          owed: 0,
+        },
+      },
+      totalCosts: prevState.totalCosts + taxOwed,
+    }));
+  },
+
+  takeLoan: (amount, termDays) => {
+    const state = get();
+    const interestRate = 0.05 + (100 - state.finances.creditRating) * 0.001; // 5-15% based on credit
+    const monthlyPayment = (amount * interestRate) / 12;
+    
+    const loan = {
+      id: uuidv4(),
+      amount,
+      remainingAmount: amount,
+      interestRate,
+      monthlyPayment,
+      startDay: state.simulationDay,
+      termDays,
+    };
+    
+    set(prevState => ({
+      cash: prevState.cash + amount,
+      finances: {
+        ...prevState.finances,
+        loans: [...prevState.finances.loans, loan],
+      },
+    }));
+  },
+
+  payLoanInstallments: () => {
+    const state = get();
+    
+    // Pay monthly installments (every 30 days)
+    if (state.simulationDay % 30 === 0 && state.simulationDay > 0) {
+      let totalPayment = 0;
+      
+      const updatedLoans = state.finances.loans.map(loan => {
+        if (loan.remainingAmount > 0) {
+          const payment = Math.min(loan.monthlyPayment, loan.remainingAmount);
+          totalPayment += payment;
+          return {
+            ...loan,
+            remainingAmount: loan.remainingAmount - payment,
+          };
+        }
+        return loan;
+      }).filter(loan => loan.remainingAmount > 0);
+      
+      set(prevState => ({
+        cash: prevState.cash - totalPayment,
+        finances: {
+          ...prevState.finances,
+          loans: updatedLoans,
+        },
+        totalCosts: prevState.totalCosts + totalPayment,
+      }));
+    }
+  },
+
+  performMaintenance: (shipId, type) => {
+    const state = get();
+    const ship = state.fleet.find(s => s.id === shipId);
+    const spec = state.shipSpecs.find(s => s.id === ship?.specId);
+    
+    if (!ship || !spec) return;
+    
+    const costs = {
+      minor: spec.buildCost * 0.01,
+      major: spec.buildCost * 0.05,
+      drydock: spec.buildCost * 0.15,
+    };
+    
+    const conditionImprovement = {
+      minor: 20,
+      major: 50,
+      drydock: 100,
+    };
+    
+    const cost = costs[type];
+    
+    if (state.cash >= cost) {
+      set(prevState => ({
+        cash: prevState.cash - cost,
+        fleet: prevState.fleet.map(s =>
+          s.id === shipId
+            ? {
+                ...s,
+                condition: Math.min(100, s.condition + conditionImprovement[type]),
+                lastMaintenance: state.simulationDay,
+                status: type === 'drydock' ? 'maintenance' as const : s.status,
+              }
+            : s
+        ),
+        totalCosts: prevState.totalCosts + cost,
+      }));
+    }
+  },
+
+  checkMaintenanceNeeds: () => {
+    const state = get();
+    
+    set(prevState => ({
+      fleet: prevState.fleet.map(ship => {
+        const daysSinceLastMaintenance = state.simulationDay - ship.lastMaintenance;
+        const conditionDecay = Math.floor(daysSinceLastMaintenance / 30) * 2; // 2% per month
+        const newCondition = Math.max(0, ship.condition - conditionDecay);
+        
+        return {
+          ...ship,
+          condition: newCondition,
+        };
+      }),
+    }));
+  },
+
   calculateVoyageCosts: (shipId, contractId) => {
     const state = get();
     const ship = state.fleet.find(s => s.id === shipId);
