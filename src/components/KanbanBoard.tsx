@@ -46,7 +46,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, items }) => {
 };
 
 const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) => {
-  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract, simulationDay } = useGameStore();
+  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract } = useGameStore();
   const [showAutoModal, setShowAutoModal] = useState(false);
 
   const isShip = 'specId' in item;
@@ -230,7 +230,7 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
           <div className="flex items-center gap-1">
             <Clock size={14} />
             <span>
-              {contract.distanceNm.toFixed(0)} nm • {contract.expiresDay}日後期限
+              {contract.distanceNm.toFixed(0)} nm • 期限まで{remainingDays}日
               {contract.contractType === 'long_term' && ` • ${contract.duration}日間`}
             </span>
           </div>
