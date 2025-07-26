@@ -1,7 +1,7 @@
 import { Port, ShipSpec, CostFactors, CargoType } from '../types/game';
 
 export const INITIAL_CASH = 250_000_000; // 250M USD
-export const SIMULATION_TICK_MS = 1000; // 1 second = 1 game day at 1x speed
+export const SIMULATION_TICK_MS = 3000; // 3 seconds = 1 game day at 1x speed (slower pace)
 
 export const COST_FACTORS: CostFactors = {
   fuel: {

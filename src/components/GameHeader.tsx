@@ -79,6 +79,9 @@ export const GameHeader: React.FC = () => {
                 );
               })}
             </div>
+            <div className="text-xs text-slate-400 ml-2">
+              1日 = {gameSpeed === 0 ? '停止' : `${3/gameSpeed}秒`}
+            </div>
           </div>
         </div>
 

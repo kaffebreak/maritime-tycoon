@@ -8,10 +8,11 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { Ship, Package, MapPin, Clock, DollarSign, Plus } from 'lucide-react';
+import { Ship, Package, MapPin, Clock, DollarSign, Plus, Settings, Repeat } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { ShipInstance, CargoContract } from '../types/game';
 import { ShipPurchaseModal } from './ShipPurchaseModal';
+import { AutoContractModal } from './AutoContractModal';
 
 interface KanbanColumnProps {
   id: string;
@@ -45,7 +46,8 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, items }) => {
 };
 
 const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) => {
-  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts } = useGameStore();
+  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract } = useGameStore();
+  const [showAutoModal, setShowAutoModal] = useState(false);
 
   const isShip = 'specId' in item;
   
@@ -66,10 +68,7 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
     };
     
     return (
-      <div 
-        className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 cursor-move hover:shadow-md transition-shadow"
-        draggable
-      >
+      <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <span className="text-lg">{getShipTypeIcon(spec?.class || '')}</span>
@@ -78,16 +77,23 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
               <p className="text-xs text-slate-500">{spec?.class} - {spec?.subclass}</p>
             </div>
           </div>
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-            ship.status === 'idle' ? 'bg-green-100 text-green-700' :
-            ship.status === 'sailing' ? 'bg-blue-100 text-blue-700' :
-            ship.status === 'loading' ? 'bg-orange-100 text-orange-700' :
-            'bg-red-100 text-red-700'
-          }`}>
-            {ship.status === 'idle' ? '待機中' :
-             ship.status === 'sailing' ? '航行中' :
-             ship.status === 'loading' ? '積込中' : 'メンテ中'}
-          </span>
+          <div className="flex items-center gap-2">
+            {ship.autoContract && (
+              <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
+                自動
+              </span>
+            )}
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              ship.status === 'idle' ? 'bg-green-100 text-green-700' :
+              ship.status === 'sailing' ? 'bg-blue-100 text-blue-700' :
+              ship.status === 'loading' ? 'bg-orange-100 text-orange-700' :
+              'bg-red-100 text-red-700'
+            }`}>
+              {ship.status === 'idle' ? '待機中' :
+               ship.status === 'sailing' ? '航行中' :
+               ship.status === 'loading' ? '積込中' : 'メンテ中'}
+            </span>
+          </div>
         </div>
         
         <div className="text-sm text-slate-600 space-y-1">
@@ -106,6 +112,29 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
             </div>
           )}
         </div>
+
+        {ship.status === 'idle' && (
+          <div className="mt-3 pt-3 border-t border-slate-200">
+            <button
+              onClick={() => setShowAutoModal(true)}
+              className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                ship.autoContract
+                  ? 'bg-purple-600 text-white hover:bg-purple-700'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <Settings size={14} className="inline mr-1" />
+              {ship.autoContract ? '自動契約: ON' : '自動契約設定'}
+            </button>
+          </div>
+        )}
+
+        {showAutoModal && (
+          <AutoContractModal
+            ship={ship}
+            onClose={() => setShowAutoModal(false)}
+          />
+        )}
       </div>
     );
   } else {
@@ -160,13 +189,21 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
         className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 cursor-move hover:shadow-md transition-shadow"
         draggable
       >
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <h4 className="font-medium text-slate-800 capitalize">
             {contract.cargoType}
           </h4>
-          <span className="text-green-600 font-bold text-sm">
-            {formatCurrency(revenue)}
-          </span>
+          <div className="text-right">
+            <div className="text-green-600 font-bold text-sm">
+              {formatCurrency(revenue)}
+            </div>
+            {contract.contractType === 'long_term' && (
+              <div className="flex items-center gap-1 text-xs text-purple-600">
+                <Repeat size={12} />
+                長期 ({contract.repeatCount}回)
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="text-sm text-slate-600 space-y-1">
@@ -180,7 +217,10 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
           </div>
           <div className="flex items-center gap-1">
             <Clock size={14} />
-            <span>{contract.distanceNm.toFixed(0)} nm • {contract.expiresDay}日後期限</span>
+            <span>
+              {contract.distanceNm.toFixed(0)} nm • {contract.expiresDay}日後期限
+              {contract.contractType === 'long_term' && ` • ${contract.duration}日間`}
+            </span>
           </div>
         </div>
         
@@ -194,9 +234,13 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
                 const ship = availableShips[0];
                 assignContract(contract.id, ship.id);
               }}
-              className="w-full px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+              className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                contract.contractType === 'long_term'
+                  ? 'bg-purple-600 text-white hover:bg-purple-700'
+                  : 'bg-blue-600 text-white hover:bg-blue-700'
+              }`}
             >
-              契約を受ける
+              {contract.contractType === 'long_term' ? '長期契約を受ける' : '契約を受ける'}
             </button>
             <div className="text-xs text-slate-600 mt-1">
               → {availableShips[0]?.name}
@@ -310,6 +354,7 @@ export const KanbanBoard: React.FC = () => {
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [selectedShipType, setSelectedShipType] = useState<string>('all');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
+  const [contractTypeFilter, setContractTypeFilter] = useState<string>('all');
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -337,7 +382,11 @@ export const KanbanBoard: React.FC = () => {
   });
 
   const idleShips = filteredFleet;
-  const availableContracts = contracts.filter(c => c.status === 'available');
+  const availableContracts = contracts.filter(c => {
+    if (c.status !== 'available') return false;
+    if (contractTypeFilter !== 'all' && c.contractType !== contractTypeFilter) return false;
+    return true;
+  });
   const assignedPairs = activeVoyages.map(v => ({
     ship: fleet.find(s => s.id === v.shipId),
     contract: contracts.find(c => c.id === v.contractId),
@@ -422,6 +471,18 @@ export const KanbanBoard: React.FC = () => {
                 {continent === 'all' ? '全て' : continent}
               </option>
             ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-slate-700">契約種別:</span>
+          <select
+            value={contractTypeFilter}
+            onChange={(e) => setContractTypeFilter(e.target.value)}
+            className="px-3 py-1 border border-slate-300 rounded-md text-sm"
+          >
+            <option value="all">全て</option>
+            <option value="spot">スポット契約</option>
+            <option value="long_term">長期契約</option>
           </select>
         </div>
         <div className="text-sm text-slate-600 flex items-center">

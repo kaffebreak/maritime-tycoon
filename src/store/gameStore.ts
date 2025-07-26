@@ -24,6 +24,8 @@ interface GameStore extends GameState {
   // Contract management
   generateContracts: () => void;
   assignContract: (contractId: string, shipId: string) => void;
+  setAutoContract: (shipId: string, enabled: boolean, settings?: any) => void;
+  processAutoContracts: () => void;
   
   // Voyage management
   startVoyage: (shipId: string, contractId: string) => void;
@@ -87,6 +89,10 @@ const generateRandomContract = (ports: Port[]): CargoContract => {
   const distanceMultiplier = Math.max(0.5, Math.min(2.0, distance / 5000));
   const freightRate = baseRate * distanceMultiplier * (0.8 + Math.random() * 0.4);
 
+  // 30% chance for long-term contract
+  const isLongTerm = Math.random() < 0.3;
+  const duration = isLongTerm ? Math.floor(Math.random() * 60) + 30 : undefined; // 30-90 days
+  const repeatCount = isLongTerm ? Math.floor(Math.random() * 8) + 2 : undefined; // 2-10 repeats
   return {
     id: uuidv4(),
     cargoType,
@@ -97,6 +103,9 @@ const generateRandomContract = (ports: Port[]): CargoContract => {
     freightRate,
     expiresDay: Math.floor(Math.random() * 30) + 7, // 7-37 days
     status: 'available',
+    contractType: isLongTerm ? 'long_term' : 'spot',
+    duration,
+    repeatCount,
   };
 };
 
@@ -133,6 +142,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ageYear: 0,
       maintenanceCost: 0,
       insuranceCost: 0,
+      autoContract: false,
+      autoSettings: {
+        minProfitMargin: 15,
+        maxDistance: 10000,
+        preferredCargoTypes: ['Container'],
+        riskTolerance: 'medium',
+      },
     };
 
     set({
@@ -157,6 +173,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Update voyages and trigger events
     get().updateVoyages();
     get().triggerRandomEvents();
+    get().processAutoContracts();
   },
 
   purchaseShip: (specId, name) => {
@@ -175,6 +192,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ageYear: 0,
       maintenanceCost: 0,
       insuranceCost: 0,
+      autoContract: false,
+      autoSettings: {
+        minProfitMargin: 15,
+        maxDistance: 10000,
+        preferredCargoTypes: [spec.class === 'Container' ? 'Container' : 
+                             spec.class === 'PCTC' ? 'Car' :
+                             spec.class === 'Tanker' ? 'Oil' :
+                             spec.class === 'Bulker' ? 'Bulk' : 'Passenger'],
+        riskTolerance: 'medium',
+      },
     };
 
     set(prevState => ({
@@ -193,6 +220,78 @@ export const useGameStore = create<GameStore>((set, get) => ({
         ...newContracts
       ],
     }));
+  },
+
+  setAutoContract: (shipId, enabled, settings) => {
+    set(prevState => ({
+      fleet: prevState.fleet.map(ship =>
+        ship.id === shipId
+          ? {
+              ...ship,
+              autoContract: enabled,
+              autoSettings: settings || ship.autoSettings,
+            }
+          : ship
+      ),
+    }));
+  },
+
+  processAutoContracts: () => {
+    const state = get();
+    const idleShipsWithAuto = state.fleet.filter(
+      ship => ship.status === 'idle' && ship.autoContract
+    );
+
+    idleShipsWithAuto.forEach(ship => {
+      const availableContracts = state.contracts.filter(contract => {
+        if (contract.status !== 'available') return false;
+
+        // Check ship compatibility
+        const shipSpec = state.shipSpecs.find(s => s.id === ship.specId);
+        if (!shipSpec) return false;
+
+        // Ship type compatibility
+        const canCarryCargoType = (() => {
+          switch (contract.cargoType) {
+            case 'Container': return shipSpec.class === 'Container';
+            case 'Car': return shipSpec.class === 'PCTC';
+            case 'Oil': return shipSpec.class === 'Tanker';
+            case 'Bulk': return shipSpec.class === 'Bulker';
+            case 'Passenger': return shipSpec.class === 'Cruise';
+            default: return false;
+          }
+        })();
+
+        if (!canCarryCargoType) return false;
+        if (contract.amount > shipSpec.capacity) return false;
+
+        // Check auto settings
+        if (!ship.autoSettings.preferredCargoTypes.includes(contract.cargoType)) return false;
+        if (contract.distanceNm > ship.autoSettings.maxDistance) return false;
+
+        // Calculate profit margin
+        const costs = get().calculateVoyageCosts(ship.id, contract.id);
+        const revenue = contract.amount * contract.freightRate;
+        const profitMargin = ((revenue - costs.total) / revenue) * 100;
+
+        if (profitMargin < ship.autoSettings.minProfitMargin) return false;
+
+        return true;
+      });
+
+      // Select best contract (highest profit margin)
+      if (availableContracts.length > 0) {
+        const bestContract = availableContracts.reduce((best, current) => {
+          const bestCosts = get().calculateVoyageCosts(ship.id, best.id);
+          const currentCosts = get().calculateVoyageCosts(ship.id, current.id);
+          const bestMargin = ((best.amount * best.freightRate - bestCosts.total) / (best.amount * best.freightRate)) * 100;
+          const currentMargin = ((current.amount * current.freightRate - currentCosts.total) / (current.amount * current.freightRate)) * 100;
+          return currentMargin > bestMargin ? current : best;
+        });
+
+        get().assignContract(bestContract.id, ship.id);
+      }
+    });
   },
 
   assignContract: (contractId, shipId) => {

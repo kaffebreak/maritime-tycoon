@@ -45,6 +45,14 @@ export interface ShipInstance {
   ageYear: number;
   maintenanceCost: number;
   insuranceCost: number;
+  // Auto contract settings
+  autoContract: boolean;
+  autoSettings: {
+    minProfitMargin: number; // %
+    maxDistance: number; // nautical miles
+    preferredCargoTypes: CargoType[];
+    riskTolerance: 'low' | 'medium' | 'high';
+  };
 }
 
 export interface CargoContract {
@@ -57,6 +65,9 @@ export interface CargoContract {
   freightRate: number;
   expiresDay: number;
   status: 'available' | 'assigned' | 'completed' | 'expired';
+  contractType: 'spot' | 'long_term';
+  duration?: number; // days for long-term contracts
+  repeatCount?: number; // remaining repeats for long-term
 }
 
 export interface Voyage {
