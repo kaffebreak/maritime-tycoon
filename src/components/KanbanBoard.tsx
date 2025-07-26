@@ -183,6 +183,12 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
       
       return isSamePort || isSameContinent;
     });
+
+    // 最適な船舶でのコスト計算
+    const bestShip = availableShips[0];
+    const costs = bestShip ? calculateVoyageCosts(bestShip.id, contract.id) : null;
+    const profit = costs ? revenue - costs.total : 0;
+    const profitMargin = costs && revenue > 0 ? ((profit / revenue) * 100) : 0;
     
     return (
       <div 
@@ -223,9 +229,66 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
             </span>
           </div>
         </div>
+
+        {/* コストと利益の表示 */}
+        {costs && (
+          <div className="mt-3 pt-3 border-t border-slate-200">
+            <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">収益:</span>
+                <span className="font-medium text-green-600">{formatCurrency(revenue)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-600">コスト:</span>
+                <span className="font-medium text-red-600">-{formatCurrency(costs.total)}</span>
+              </div>
+              <div className="flex justify-between text-sm border-t pt-2">
+                <span className="text-slate-700 font-medium">利益:</span>
+                <span className={`font-bold ${profit > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {formatCurrency(profit)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">利益率:</span>
+                <span className={`font-medium ${profitMargin > 15 ? 'text-green-600' : profitMargin > 5 ? 'text-yellow-600' : 'text-red-600'}`}>
+                  {profitMargin.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+            
+            {/* コスト内訳（詳細表示） */}
+            <details className="mt-2">
+              <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700">
+                コスト詳細を表示
+              </summary>
+              <div className="mt-2 bg-slate-50 rounded p-2 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span>燃料費:</span>
+                  <span>{formatCurrency(costs.fuel)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>港湾費:</span>
+                  <span>{formatCurrency(costs.port)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>貨物費:</span>
+                  <span>{formatCurrency(costs.cargo)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>メンテナンス:</span>
+                  <span>{formatCurrency(costs.maintenance)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>保険:</span>
+                  <span>{formatCurrency(costs.insurance)}</span>
+                </div>
+              </div>
+            </details>
+          </div>
+        )}
         
         {availableShips.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-slate-200">
+          <div className="mt-3">
             <div className="text-xs text-slate-500 mb-2">
               対応可能船舶: {availableShips.length}隻
             </div>
@@ -235,15 +298,23 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
                 assignContract(contract.id, ship.id);
               }}
               className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                contract.contractType === 'long_term'
+                profit <= 0 
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : contract.contractType === 'long_term'
                   ? 'bg-purple-600 text-white hover:bg-purple-700'
                   : 'bg-blue-600 text-white hover:bg-blue-700'
               }`}
             >
-              {contract.contractType === 'long_term' ? '長期契約を受ける' : '契約を受ける'}
+              {profit <= 0 ? '⚠️ 赤字契約を受ける' : 
+               contract.contractType === 'long_term' ? '長期契約を受ける' : '契約を受ける'}
             </button>
             <div className="text-xs text-slate-600 mt-1">
               → {availableShips[0]?.name}
+              {costs && (
+                <span className={`ml-2 font-medium ${profit > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  (利益: {formatCurrency(profit)})
+                </span>
+              )}
             </div>
           </div>
         )}
