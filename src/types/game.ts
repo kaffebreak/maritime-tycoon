@@ -8,6 +8,8 @@ export type WeatherCondition = 'clear' | 'rough' | 'storm' | 'fog';
 export type SeasonType = 'spring' | 'summer' | 'autumn' | 'winter';
 export type GlobalEventType = 'fuel_surge' | 'economic_boom' | 'recession' | 'port_strike' | 'piracy_alert' | 'seasonal_demand';
 export type AchievementType = 'first_voyage' | 'profit_milestone' | 'fleet_size' | 'route_master' | 'efficiency_expert';
+export type CompanyType = 'player' | 'npc';
+export type NPCStrategy = 'aggressive' | 'conservative' | 'balanced' | 'opportunistic';
 
 export interface Port {
   LOCODE: string;
@@ -167,6 +169,48 @@ export interface Achievement {
   progress: number;
 }
 
+export interface NPCCompany {
+  id: string;
+  name: string;
+  founderName: string;
+  type: CompanyType;
+  strategy: NPCStrategy;
+  cash: number;
+  reputation: number;
+  fleetSize: number;
+  totalRevenue: number;
+  totalCosts: number;
+  completedContracts: number;
+  marketShare: number;
+  lastAction: string;
+  founded: number; // simulation day
+  color: string; // for UI display
+}
+
+export interface RankingEntry {
+  companyId: string;
+  companyName: string;
+  rank: number;
+  score: number;
+  change: number; // rank change from last period
+  metrics: {
+    revenue: number;
+    profit: number;
+    fleetSize: number;
+    reputation: number;
+    marketShare: number;
+  };
+}
+
+export interface MarketNews {
+  id: string;
+  type: 'company_expansion' | 'contract_win' | 'market_entry' | 'bankruptcy' | 'merger';
+  companyId: string;
+  message: string;
+  day: number;
+  impact: 'positive' | 'negative' | 'neutral';
+}
+
 export interface CompanyFinances {
   loans: Loan[];
   insurance: InsurancePolicy[];
@@ -234,6 +278,13 @@ export interface GameState {
   achievements: Achievement[];
   finances: CompanyFinances;
   reputation: number; // 0-100
+  
+  // NPC and Competition
+  npcCompanies: NPCCompany[];
+  rankings: RankingEntry[];
+  marketNews: MarketNews[];
+  competitionLevel: number; // 0-100, affects contract availability
+  
   researchPoints: number;
   unlockedFeatures: string[];
   
