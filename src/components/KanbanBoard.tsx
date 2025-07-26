@@ -190,9 +190,15 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
     const profit = costs ? revenue - costs.total : 0;
     const profitMargin = costs && revenue > 0 ? ((profit / revenue) * 100) : 0;
     
+    // Calculate remaining days
+    const remainingDays = contract.expiresDay - (simulationDay - contract.createdDay);
+    const isUrgent = remainingDays <= 3;
+    
     return (
-      <div 
-        className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 cursor-move hover:shadow-md transition-shadow"
+      <div
+        className={`bg-white rounded-lg p-4 shadow-sm border cursor-move hover:shadow-md transition-shadow ${
+          isUrgent ? 'border-red-300 bg-red-50' : 'border-slate-200'
+        }`}
         draggable
       >
         <div className="flex items-center justify-between mb-3">
@@ -418,7 +424,8 @@ export const KanbanBoard: React.FC = () => {
     generateContracts,
     activeVoyages,
     ports,
-    shipSpecs
+    shipSpecs,
+    simulationDay
   } = useGameStore();
   
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -456,6 +463,11 @@ export const KanbanBoard: React.FC = () => {
   const availableContracts = contracts.filter(c => {
     if (c.status !== 'available') return false;
     if (contractTypeFilter !== 'all' && c.contractType !== contractTypeFilter) return false;
+    
+    // Filter out expired contracts
+    const remainingDays = c.expiresDay - (simulationDay - c.createdDay);
+    if (remainingDays <= 0) return false;
+    
     return true;
   });
   const assignedPairs = activeVoyages.map(v => ({
@@ -625,7 +637,7 @@ export const KanbanBoard: React.FC = () => {
                       <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-sm">
                         <span className="text-yellow-800">
                           {voyage.events[voyage.events.length - 1].message}
-                        </span>
+                      {contract.distanceNm.toFixed(0)} nm • 期限まで{Math.max(0, contract.expiresDay - (simulationDay - contract.createdDay))}日
                       </div>
                     )}
                   </div>

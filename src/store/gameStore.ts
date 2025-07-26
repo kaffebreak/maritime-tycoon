@@ -101,7 +101,8 @@ const generateRandomContract = (ports: Port[]): CargoContract => {
     destination: destination.LOCODE,
     distanceNm: distance,
     freightRate,
-    expiresDay: Math.floor(Math.random() * 30) + 7, // 7-37 days
+    expiresDay: Math.floor(Math.random() * 30) + 7, // 7-37 days duration
+    createdDay: 0, // Will be set when contract is generated
     status: 'available',
     contractType: isLongTerm ? 'long_term' : 'spot',
     duration,
@@ -161,6 +162,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
     };
 
+    const initialContracts = Array.from({ length: 12 }, () => {
+      const contract = generateRandomContract(SAMPLE_PORTS);
+      return { ...contract, createdDay: 0 };
+    });
     set({
       simulationDay: 0,
       cash: initialCash,
@@ -168,7 +173,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       companyName: companyName || '',
       founderName: founderName || '',
       fleet: [starterShip],
-      contracts: Array.from({ length: 12 }, () => generateRandomContract(SAMPLE_PORTS)),
+      contracts: initialContracts,
     });
   },
 
@@ -186,6 +191,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     // Update voyages and trigger events
     get().updateVoyages();
+    get().updateContractExpiration();
     get().triggerRandomEvents();
     get().processAutoContracts();
   },
@@ -226,11 +232,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   generateContracts: () => {
     const state = get();
-    const newContracts = Array.from({ length: 8 }, () => generateRandomContract(state.ports));
+    const newContracts = Array.from({ length: 8 }, () => {
+      const contract = generateRandomContract(state.ports);
+      return { ...contract, createdDay: state.simulationDay };
+    });
     
     set(prevState => ({
       contracts: [
-        ...prevState.contracts.filter(c => c.status === 'assigned'),
+        ...prevState.contracts.filter(c => c.status === 'assigned' || c.status === 'completed'),
         ...newContracts
       ],
     }));
@@ -413,6 +422,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }),
       };
     });
+  },
+
+  updateContractExpiration: () => {
+    const state = get();
+    
+    set(prevState => ({
+      contracts: prevState.contracts.map(contract => {
+        if (contract.status === 'available') {
+          const remainingDays = contract.expiresDay - (state.simulationDay - contract.createdDay);
+          
+          if (remainingDays <= 0) {
+            return { ...contract, status: 'expired' as const };
+          }
+        }
+        return contract;
+      }),
+    }));
   },
 
   triggerRandomEvents: () => {
