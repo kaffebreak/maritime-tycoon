@@ -230,7 +230,7 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
           <div className="flex items-center gap-1">
             <Clock size={14} />
             <span>
-              {contract.distanceNm.toFixed(0)} nm • {contract.expiresDay}日後期限
+              {contract.distanceNm.toFixed(0)} nm • 残り{remainingDays}日
               {contract.contractType === 'long_term' && ` • ${contract.duration}日間`}
             </span>
           </div>
@@ -642,7 +642,7 @@ export const KanbanBoard: React.FC = () => {
                     )}
                     
                     <div className="text-xs text-slate-500 mt-2">
-                      {contract.distanceNm.toFixed(0)} nm • 期限まで{Math.max(0, contract.expiresDay - (simulationDay - contract.createdDay))}日
+                      {contract.distanceNm.toFixed(0)} nm • 残り{Math.max(0, contract.expiresDay - (simulationDay - contract.createdDay))}日
                     </div>
                   </div>
                 );
