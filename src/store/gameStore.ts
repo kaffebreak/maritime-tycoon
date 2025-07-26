@@ -8,7 +8,8 @@ import {
   FREIGHT_RATES,
   EVENT_PROBABILITIES,
   DIFFICULTY_MULTIPLIERS,
-  calculateDistance 
+  calculateDistance,
+  SEASONAL_DEMAND_MULTIPLIERS
 } from '../constants/gameData';
 import { v4 as uuidv4 } from 'uuid';
 
