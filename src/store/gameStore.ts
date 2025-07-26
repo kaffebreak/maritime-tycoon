@@ -14,9 +14,10 @@ import { v4 as uuidv4 } from 'uuid';
 
 interface GameStore extends GameState {
   // Actions
-  initializeGame: () => void;
+  initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard') => void;
   setGameSpeed: (speed: GameState['gameSpeed']) => void;
   advanceSimulation: () => void;
+  updateContractExpiration: () => void;
   
   // Ship management
   purchaseShip: (specId: string, name: string) => void;
