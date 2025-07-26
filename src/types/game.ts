@@ -6,7 +6,7 @@ export type Difficulty = 'Easy' | 'Normal' | 'Hard';
 export type GameSpeed = 0 | 1 | 2 | 5;
 export type WeatherCondition = 'clear' | 'rough' | 'storm' | 'fog';
 export type SeasonType = 'spring' | 'summer' | 'autumn' | 'winter';
-export type GlobalEventType = 'fuel_surge' | 'economic_boom' | 'recession' | 'port_strike' | 'piracy_alert' | 'seasonal_demand';
+export type GlobalEventType = 'fuel_surge' | 'economic_boom' | 'recession' | 'port_strike' | 'piracy_alert' | 'seasonal_demand' | 'trade_war' | 'pandemic' | 'canal_blockage' | 'environmental_regulation' | 'tech_breakthrough' | 'geopolitical_crisis';
 export type AchievementType = 'first_voyage' | 'profit_milestone' | 'fleet_size' | 'route_master' | 'efficiency_expert';
 export type CompanyType = 'player' | 'npc';
 export type NPCStrategy = 'aggressive' | 'conservative' | 'balanced' | 'opportunistic';
@@ -127,15 +127,19 @@ export interface Voyage {
 
 export interface VoyageEvent {
   id: string;
-  type: 'weather' | 'strike' | 'piracy' | 'fuel_surge' | 'demand_surge';
+  type: 'weather' | 'strike' | 'piracy' | 'fuel_surge' | 'demand_surge' | 'typhoon' | 'winter_storm' | 'fog_delay' | 'port_congestion';
   message: string;
   day: number;
   impact: {
     delayDays?: number;
     costMultiplier?: number;
     revenueMultiplier?: number;
+    fuelMultiplier?: number;
+    insuranceMultiplier?: number;
   };
   duration: number;
+  severity: 'minor' | 'moderate' | 'severe' | 'critical';
+  affectedRegions?: string[];
 }
 
 export interface GlobalEvent {
@@ -145,13 +149,18 @@ export interface GlobalEvent {
   description: string;
   startDay: number;
   duration: number;
+  severity: 'minor' | 'moderate' | 'severe' | 'critical';
   effects: {
     fuelPriceMultiplier?: number;
     demandMultiplier?: Record<CargoType, number>;
     portEfficiencyMultiplier?: number;
     riskMultiplier?: number;
+    insuranceMultiplier?: number;
+    maintenanceMultiplier?: number;
+    contractPriceMultiplier?: number;
   };
   affectedRegions?: string[]; // continent names
+  chainEvents?: string[]; // IDs of events this can trigger
 }
 
 export interface Achievement {
@@ -248,9 +257,15 @@ export interface MarketConditions {
     VLSFO: number;
     HFO: number;
     trend: 'rising' | 'falling' | 'stable';
+    volatility: number; // 0-100, affects price swings
+    lastChange: number; // simulation day
   };
   demandMultipliers: Record<CargoType, number>;
   competitionLevel: number; // 0-100
+  economicClimate: 'recession' | 'stable' | 'growth' | 'boom';
+  geopoliticalTension: number; // 0-100
+  environmentalPressure: number; // 0-100, affects regulations
+  technologyLevel: number; // 0-100, affects efficiency
 }
 
 export interface GameState {

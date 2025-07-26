@@ -3,7 +3,7 @@ import { Globe, TrendingUp, TrendingDown, AlertTriangle, Calendar } from 'lucide
 import { useGameStore } from '../store/gameStore';
 
 export const GlobalEventsPanel: React.FC = () => {
-  const { newGlobalEvents, marketConditions, simulationDay } = useGameStore();
+  const { newGlobalEvents, marketConditions, simulationDay, formatCurrency } = useGameStore();
 
   const activeEvents = newGlobalEvents.filter(event => 
     simulationDay >= event.startDay && 
@@ -16,6 +16,12 @@ export const GlobalEventsPanel: React.FC = () => {
       case 'recession': return <TrendingDown className="text-red-600" size={20} />;
       case 'fuel_surge': return <AlertTriangle className="text-orange-600" size={20} />;
       case 'seasonal_demand': return <Calendar className="text-blue-600" size={20} />;
+      case 'trade_war': return <AlertTriangle className="text-red-600" size={20} />;
+      case 'pandemic': return <AlertTriangle className="text-purple-600" size={20} />;
+      case 'canal_blockage': return <AlertTriangle className="text-orange-600" size={20} />;
+      case 'environmental_regulation': return <Globe className="text-green-600" size={20} />;
+      case 'tech_breakthrough': return <TrendingUp className="text-blue-600" size={20} />;
+      case 'geopolitical_crisis': return <AlertTriangle className="text-red-600" size={20} />;
       default: return <Globe className="text-slate-600" size={20} />;
     }
   };
@@ -92,6 +98,18 @@ export const GlobalEventsPanel: React.FC = () => {
                       <h4 className="font-medium text-slate-800">{event.title}</h4>
                       <p className="text-sm text-slate-600">{event.description}</p>
                     </div>
+                    <div className="ml-auto">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        event.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                        event.severity === 'severe' ? 'bg-orange-100 text-orange-700' :
+                        event.severity === 'moderate' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-blue-100 text-blue-700'
+                      }`}>
+                        {event.severity === 'critical' ? '🚨 重大' :
+                         event.severity === 'severe' ? '⚠️ 深刻' :
+                         event.severity === 'moderate' ? '📊 中程度' : '💡 軽微'}
+                      </span>
+                    </div>
                   </div>
                   
                   <div className="flex items-center justify-between text-sm">
@@ -116,6 +134,16 @@ export const GlobalEventsPanel: React.FC = () => {
                           需要変動
                         </span>
                       )}
+                      
+                      {event.effects.contractPriceMultiplier && (
+                        <span className={`px-2 py-1 rounded-full text-xs ${
+                          event.effects.contractPriceMultiplier > 1 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          運賃 {event.effects.contractPriceMultiplier > 1 ? '+' : ''}{((event.effects.contractPriceMultiplier - 1) * 100).toFixed(0)}%
+                        </span>
+                      )}
                     </div>
                   </div>
                   
@@ -123,13 +151,24 @@ export const GlobalEventsPanel: React.FC = () => {
                   <div className="mt-3">
                     <div className="w-full bg-slate-200 rounded-full h-1">
                       <div 
-                        className="bg-blue-600 h-1 rounded-full transition-all duration-1000"
+                        className={`h-1 rounded-full transition-all duration-1000 ${
+                          event.severity === 'critical' ? 'bg-red-600' :
+                          event.severity === 'severe' ? 'bg-orange-600' :
+                          event.severity === 'moderate' ? 'bg-yellow-600' : 'bg-blue-600'
+                        }`}
                         style={{ 
                           width: `${Math.max(0, (remainingDays / event.duration) * 100)}%` 
                         }}
                       />
                     </div>
                   </div>
+                  
+                  {/* Affected Regions */}
+                  {event.affectedRegions && event.affectedRegions.length > 0 && (
+                    <div className="mt-2 text-xs text-slate-500">
+                      影響地域: {event.affectedRegions.join(', ')}
+                    </div>
+                  )}
                 </div>
               );
             })}
