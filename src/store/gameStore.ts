@@ -131,6 +131,71 @@ export const useGameStore = create<GameStore>((set, get) => ({
   fuelPrice: COST_FACTORS.fuel.VLSFO,
   globalEvents: [],
   
+  newGlobalEvents: [],
+  marketConditions: {
+    season: 'spring',
+    demandMultipliers: { Container: 1.0, Car: 1.0, Bulk: 1.0, Oil: 1.0, Passenger: 1.0 },
+    fuelPrices: {
+      VLSFO: COST_FACTORS.fuel.VLSFO,
+      HFO: COST_FACTORS.fuel.HFO,
+      trend: 'stable' as const,
+    },
+    competitionLevel: 'medium' as const,
+  },
+  
+  achievements: [
+    {
+      id: 'first_voyage',
+      title: '初航海',
+      description: '最初の契約を完了する',
+      type: 'first_voyage',
+      requirement: 1,
+      progress: 0,
+      unlocked: false,
+      reward: { cash: 100000, reputation: 5 },
+    },
+    {
+      id: 'profit_milestone',
+      title: '利益の達人',
+      description: '累計利益$1,000,000を達成する',
+      type: 'profit_milestone',
+      requirement: 1000000,
+      progress: 0,
+      unlocked: false,
+      reward: { cash: 500000, reputation: 10 },
+    },
+    {
+      id: 'fleet_expansion',
+      title: '艦隊司令官',
+      description: '5隻の船舶を所有する',
+      type: 'fleet_size',
+      requirement: 5,
+      progress: 0,
+      unlocked: false,
+      reward: { cash: 250000, reputation: 8 },
+    },
+    {
+      id: 'route_master',
+      title: '航路の達人',
+      description: '100回の契約を完了する',
+      type: 'route_master',
+      requirement: 100,
+      progress: 0,
+      unlocked: false,
+      reward: { cash: 1000000, reputation: 15 },
+    },
+  ],
+  
+  finances: {
+    loans: [],
+    creditRating: 80,
+    taxes: {
+      rate: 0.25,
+      owed: 0,
+      lastPaid: 0,
+    },
+  },
+  
   totalRevenue: 0,
   totalCosts: 0,
   completedContracts: 0,
@@ -196,6 +261,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().updateContractExpiration();
     get().maintainContractPool();
     get().triggerRandomEvents();
+    get().triggerGlobalEvents();
+    get().updateMarketConditions();
+    get().checkAchievements();
+    get().payLoanInstallments();
+    get().checkMaintenanceNeeds();
     get().processAutoContracts();
   },
 
