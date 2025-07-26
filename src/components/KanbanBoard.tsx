@@ -46,7 +46,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, items }) => {
 };
 
 const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) => {
-  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract, simulationDay } = useGameStore();
+  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract } = useGameStore();
   const [showAutoModal, setShowAutoModal] = useState(false);
 
   const isShip = 'specId' in item;
@@ -190,15 +190,9 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
     const profit = costs ? revenue - costs.total : 0;
     const profitMargin = costs && revenue > 0 ? ((profit / revenue) * 100) : 0;
     
-    // Calculate remaining days
-    const remainingDays = contract.expiresDay - (simulationDay - contract.createdDay);
-    const isUrgent = remainingDays <= 3;
-    
     return (
-      <div
-        className={`bg-white rounded-lg p-4 shadow-sm border cursor-move hover:shadow-md transition-shadow ${
-          isUrgent ? 'border-red-300 bg-red-50' : 'border-slate-200'
-        }`}
+      <div 
+        className="bg-white rounded-lg p-4 shadow-sm border border-slate-200 cursor-move hover:shadow-md transition-shadow"
         draggable
       >
         <div className="flex items-center justify-between mb-3">
@@ -230,7 +224,7 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
           <div className="flex items-center gap-1">
             <Clock size={14} />
             <span>
-              {contract.distanceNm.toFixed(0)} nm • 期限まで{remainingDays}日
+              {contract.distanceNm.toFixed(0)} nm • {contract.expiresDay}日後期限
               {contract.contractType === 'long_term' && ` • ${contract.duration}日間`}
             </span>
           </div>
@@ -640,6 +634,10 @@ export const KanbanBoard: React.FC = () => {
                         </span>
                       </div>
                     )}
+                    
+                    <div className="text-xs text-slate-500 mt-2">
+                      {contract.distanceNm.toFixed(0)} nm • 期限まで{Math.max(0, contract.expiresDay - (simulationDay - contract.createdDay))}日
+                    </div>
                   </div>
                 );
               })}
