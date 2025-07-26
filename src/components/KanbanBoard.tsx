@@ -521,7 +521,7 @@ export const KanbanBoard: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
           >
             <Plus size={16} />
-            新規契約
+            追加契約
           </button>
         </div>
       </div>

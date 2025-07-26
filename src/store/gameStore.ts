@@ -18,6 +18,7 @@ interface GameStore extends GameState {
   setGameSpeed: (speed: GameState['gameSpeed']) => void;
   advanceSimulation: () => void;
   updateContractExpiration: () => void;
+  maintainContractPool: () => void;
   
   // Ship management
   purchaseShip: (specId: string, name: string) => void;
@@ -193,7 +194,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Update voyages and trigger events
     get().updateVoyages();
     get().updateContractExpiration();
-    get().updateContractExpiration();
+    get().maintainContractPool();
     get().triggerRandomEvents();
     get().processAutoContracts();
   },
@@ -234,14 +235,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   generateContracts: () => {
     const state = get();
-    const newContracts = Array.from({ length: 8 }, () => {
+    const newContracts = Array.from({ length: 6 }, () => {
       const contract = generateRandomContract(state.ports);
       return { ...contract, createdDay: state.simulationDay };
     });
     
     set(prevState => ({
       contracts: [
-        ...prevState.contracts.filter(c => c.status !== 'available' && c.status !== 'expired'),
+        ...prevState.contracts,
         ...newContracts
       ],
     }));
@@ -440,6 +441,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }
         return contract;
       }),
+    }));
+  },
+
+  maintainContractPool: () => {
+    const state = get();
+    const availableContracts = state.contracts.filter(c => c.status === 'available');
+    const targetCount = 10;
+    const minCount = 8;
+    
+    // If we have fewer than minimum contracts, generate new ones
+    if (availableContracts.length < minCount) {
+      const contractsToGenerate = targetCount - availableContracts.length;
+      const newContracts = Array.from({ length: contractsToGenerate }, () => {
+        const contract = generateRandomContract(state.ports);
+        return { ...contract, createdDay: state.simulationDay };
+      });
+      
+      set(prevState => ({
+        contracts: [...prevState.contracts, ...newContracts],
+      }));
+    }
+    
+    // Clean up old expired contracts (keep only recent ones for history)
+    const cutoffDay = state.simulationDay - 30; // Keep 30 days of history
+    set(prevState => ({
+      contracts: prevState.contracts.filter(contract => 
+        contract.status !== 'expired' || 
+        (contract.createdDay > cutoffDay)
+      ),
     }));
   },
 
