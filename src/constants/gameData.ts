@@ -1,6 +1,6 @@
 import { Port, ShipSpec, CostFactors, CargoType } from '../types/game';
 
-export const INITIAL_CASH = 250_000_000; // 250M USD
+export const INITIAL_CASH = 15_000_000; // 15M USD - More realistic startup capital
 export const SIMULATION_TICK_MS = 3000; // 3 seconds = 1 game day at 1x speed (slower pace)
 
 export const COST_FACTORS: CostFactors = {
@@ -162,7 +162,7 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     capacity: 20000, // TEU
     speedKt: 22,
     fuelBurn100nm: 45,
-    buildCost: 150_000_000,
+    buildCost: 180_000_000, // Increased cost
   },
   {
     id: 'FEEDER-1',
@@ -172,7 +172,7 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     capacity: 1200, // TEU
     speedKt: 18,
     fuelBurn100nm: 12,
-    buildCost: 25_000_000,
+    buildCost: 35_000_000, // Increased cost
   },
   {
     id: 'PCTC-1',
@@ -182,7 +182,7 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     capacity: 6000, // CEU
     speedKt: 20,
     fuelBurn100nm: 35,
-    buildCost: 80_000_000,
+    buildCost: 95_000_000, // Increased cost
   },
   {
     id: 'VLCC-1',
@@ -192,7 +192,7 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     capacity: 300000, // tonnes
     speedKt: 16,
     fuelBurn100nm: 55,
-    buildCost: 120_000_000,
+    buildCost: 140_000_000, // Increased cost
   },
   {
     id: 'BULK-1',
@@ -202,7 +202,7 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     capacity: 180000, // tonnes
     speedKt: 14,
     fuelBurn100nm: 40,
-    buildCost: 60_000_000,
+    buildCost: 75_000_000, // Increased cost
   },
 ];
 

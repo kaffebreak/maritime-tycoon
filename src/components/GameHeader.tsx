@@ -7,6 +7,8 @@ export const GameHeader: React.FC = () => {
     simulationDay, 
     gameSpeed, 
     cash, 
+    companyName,
+    founderName,
     setGameSpeed, 
     formatCurrency,
     globalEvents 
@@ -29,8 +31,12 @@ export const GameHeader: React.FC = () => {
           <div className="flex items-center gap-4">
             <Anchor className="text-blue-400" size={32} />
             <div>
-              <h1 className="text-2xl font-bold">Maritime Tycoon</h1>
-              <p className="text-blue-200 text-sm">海運経営シミュレーション</p>
+              <h1 className="text-2xl font-bold">
+                {companyName || 'Maritime Tycoon'}
+              </h1>
+              <p className="text-blue-200 text-sm">
+                {founderName ? `CEO: ${founderName}` : '海運経営シミュレーション'}
+              </p>
             </div>
           </div>
 

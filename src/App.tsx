@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { GameHeader } from './components/GameHeader';
 import { KanbanBoard } from './components/KanbanBoard';
 import { Dashboard } from './components/Dashboard';
+import { CompanySetupModal } from './components/CompanySetupModal';
 import { useGameStore } from './store/gameStore';
 import { useGameTick } from './hooks/useGameTick';
 import { BarChart3, Kanban } from 'lucide-react';
@@ -11,12 +12,14 @@ type ActiveTab = 'kanban' | 'dashboard';
 function App() {
   const { initializeGame } = useGameStore();
   const [activeTab, setActiveTab] = useState<ActiveTab>('kanban');
+  const [showSetup, setShowSetup] = useState(true);
   
   useGameTick();
 
-  useEffect(() => {
-    initializeGame();
-  }, [initializeGame]);
+  const handleCompanySetup = (companyName: string, founderName: string, difficulty: 'Easy' | 'Normal' | 'Hard') => {
+    initializeGame(companyName, founderName, difficulty);
+    setShowSetup(false);
+  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -48,6 +51,10 @@ function App() {
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, []);
+
+  if (showSetup) {
+    return <CompanySetupModal onComplete={handleCompanySetup} />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-blue-50">

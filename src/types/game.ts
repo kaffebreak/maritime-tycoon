@@ -107,6 +107,8 @@ export interface GameState {
   gameSpeed: GameSpeed;
   cash: number;
   difficulty: Difficulty;
+  companyName: string;
+  founderName: string;
   
   // Game entities
   ports: Port[];

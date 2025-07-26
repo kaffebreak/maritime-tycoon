@@ -113,8 +113,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   // Initial state
   simulationDay: 0,
   gameSpeed: 1,
-  cash: INITIAL_CASH,
+  cash: 0,
   difficulty: 'Normal',
+  companyName: '',
+  founderName: '',
   
   ports: SAMPLE_PORTS,
   shipSpecs: SAMPLE_SHIP_SPECS,
@@ -130,7 +132,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   totalCosts: 0,
   completedContracts: 0,
 
-  initializeGame: () => {
+  initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard') => {
+    const difficultySettings = {
+      Easy: 25_000_000,
+      Normal: 15_000_000,
+      Hard: 8_000_000,
+    };
+    
+    const initialCash = difficulty ? difficultySettings[difficulty] : INITIAL_CASH;
+    
     const starterShip: ShipInstance = {
       id: uuidv4(),
       specId: 'FEEDER-1',
@@ -153,6 +163,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set({
       simulationDay: 0,
+      cash: initialCash,
+      difficulty: difficulty || 'Normal',
+      companyName: companyName || '',
+      founderName: founderName || '',
       fleet: [starterShip],
       contracts: Array.from({ length: 12 }, () => generateRandomContract(SAMPLE_PORTS)),
     });
