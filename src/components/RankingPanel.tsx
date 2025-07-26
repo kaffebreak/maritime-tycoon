@@ -209,7 +209,7 @@ export const RankingPanel: React.FC = () => {
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-orange-600">
-              {(rankings.reduce((sum, r) => sum + r.metrics.reputation, 0) / rankings.length).toFixed(0)}
+              {rankings.length > 0 ? (rankings.reduce((sum, r) => sum + r.metrics.reputation, 0) / rankings.length).toFixed(0) : '0'}
             </div>
             <div className="text-slate-600">平均評判</div>
           </div>
