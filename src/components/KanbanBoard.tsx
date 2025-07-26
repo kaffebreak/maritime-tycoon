@@ -46,7 +46,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, items }) => {
 };
 
 const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) => {
-  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract } = useGameStore();
+  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract, simulationDay } = useGameStore();
   const [showAutoModal, setShowAutoModal] = useState(false);
 
   const isShip = 'specId' in item;
@@ -637,7 +637,7 @@ export const KanbanBoard: React.FC = () => {
                       <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-sm">
                         <span className="text-yellow-800">
                           {voyage.events[voyage.events.length - 1].message}
-                      {contract.distanceNm.toFixed(0)} nm • 期限まで{Math.max(0, contract.expiresDay - (simulationDay - contract.createdDay))}日
+                        </span>
                       </div>
                     )}
                   </div>
