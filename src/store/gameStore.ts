@@ -9,7 +9,9 @@ import {
   EVENT_PROBABILITIES,
   DIFFICULTY_MULTIPLIERS,
   calculateDistance,
-  SEASONAL_DEMAND_MULTIPLIERS
+  SEASONAL_DEMAND_MULTIPLIERS,
+  NPC_COMPANY_NAMES,
+  NPC_STRATEGIES
 } from '../constants/gameData';
 import { v4 as uuidv4 } from 'uuid';
 
