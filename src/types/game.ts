@@ -64,6 +64,7 @@ export interface CargoContract {
   distanceNm: number;
   freightRate: number;
   expiresDay: number;
+  createdDay: number;
   status: 'available' | 'assigned' | 'completed' | 'expired';
   contractType: 'spot' | 'long_term';
   duration?: number; // days for long-term contracts
