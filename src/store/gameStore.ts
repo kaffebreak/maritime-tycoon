@@ -11,7 +11,11 @@ import {
   calculateDistance,
   SEASONAL_DEMAND_MULTIPLIERS,
   NPC_COMPANY_NAMES,
-  NPC_STRATEGIES
+  NPC_STRATEGIES,
+  REGIONAL_WEATHER_PATTERNS,
+  GLOBAL_EVENT_TEMPLATES,
+  FUEL_PRICE_FACTORS,
+  ECONOMIC_CYCLES
 } from '../constants/gameData';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -38,6 +42,10 @@ interface GameStore extends GameState {
   
   // Event system
   triggerRandomEvents: () => void;
+  triggerWeatherEvents: () => void;
+  updateFuelPrices: () => void;
+  triggerEconomicCycles: () => void;
+  simulateMarketCompetition: () => void;
   
   // Utilities
   formatCurrency: (amount: number) => string;
@@ -137,13 +145,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
   newGlobalEvents: [],
   marketConditions: {
     season: 'spring',
+    weatherPatterns: {},
     demandMultipliers: { Container: 1.0, Car: 1.0, Bulk: 1.0, Oil: 1.0, Passenger: 1.0 },
     fuelPrices: {
       VLSFO: COST_FACTORS.fuel.VLSFO,
       HFO: COST_FACTORS.fuel.HFO,
       trend: 'stable' as const,
+      volatility: 20,
+      lastChange: 0,
     },
-    competitionLevel: 'medium' as const,
+    competitionLevel: 50,
+    economicClimate: 'stable' as const,
+    geopoliticalTension: 30,
+    environmentalPressure: 40,
+    technologyLevel: 50,
   },
   
   achievements: [
@@ -277,8 +292,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().updateContractExpiration();
     get().maintainContractPool();
     get().triggerRandomEvents();
+    get().triggerWeatherEvents();
+    get().updateFuelPrices();
+    get().triggerEconomicCycles();
     get().triggerGlobalEvents();
     get().updateMarketConditions();
+    get().simulateMarketCompetition();
+    get().simulateNPCActions();
+    get().updateRankings();
     get().checkAchievements();
     get().payLoanInstallments();
     get().checkMaintenanceNeeds();
@@ -577,9 +598,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     const multiplier = DIFFICULTY_MULTIPLIERS[state.difficulty];
 
-    // Weather events for sailing ships
+    // Basic random events (keeping existing functionality)
     state.fleet.filter(s => s.status === 'sailing').forEach(ship => {
-      if (Math.random() < EVENT_PROBABILITIES.weather * multiplier.probability) {
+      if (Math.random() < EVENT_PROBABILITIES.weather * multiplier.probability * 0.5) { // Reduced since we have dedicated weather system
         const event: VoyageEvent = {
           id: uuidv4(),
           type: 'weather',
@@ -587,6 +608,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           day: state.simulationDay,
           impact: { delayDays: 1 * multiplier.effect },
           duration: 1,
+          severity: 'minor',
         };
 
         set(prevState => ({
@@ -599,7 +621,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       }
     });
 
-    // Global fuel surge
+    // Basic fuel surge (complementing the detailed fuel system)
     if (Math.random() < EVENT_PROBABILITIES.fuel_surge * multiplier.probability) {
       const event: VoyageEvent = {
         id: uuidv4(),
@@ -608,6 +630,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
         day: state.simulationDay,
         impact: { costMultiplier: 1.5 * multiplier.effect },
         duration: 7,
+        severity: 'moderate',
+        affectedRegions: ['Global'],
       };
 
       set(prevState => ({
@@ -624,8 +648,265 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }));
   },
 
+  triggerWeatherEvents: () => {
+    const state = get();
+    const currentSeason = state.marketConditions.season;
+    
+    // Regional weather events
+    Object.keys(REGIONAL_WEATHER_PATTERNS).forEach(region => {
+      const patterns = REGIONAL_WEATHER_PATTERNS[region][currentSeason];
+      
+      Object.entries(patterns).forEach(([weatherType, probability]) => {
+        if (Math.random() < probability) {
+          const shipsInRegion = state.fleet.filter(ship => {
+            const currentPort = state.ports.find(p => p.LOCODE === ship.currentPort);
+            return currentPort?.continent === region && ship.status === 'sailing';
+          });
+          
+          if (shipsInRegion.length > 0) {
+            const severity = Math.random() < 0.1 ? 'severe' : Math.random() < 0.3 ? 'moderate' : 'minor';
+            const impact = {
+              minor: { delayDays: 0.5, fuelMultiplier: 1.1 },
+              moderate: { delayDays: 1.5, fuelMultiplier: 1.2, costMultiplier: 1.1 },
+              severe: { delayDays: 3, fuelMultiplier: 1.4, costMultiplier: 1.3 },
+            }[severity];
+            
+            const weatherMessages = {
+              typhoon: `${region}で台風が発生し、航行に大きな影響が出ています`,
+              winter_storm: `${region}で冬季嵐により航行が困難になっています`,
+              storm: `${region}で嵐により航行が遅延しています`,
+              fog: `${region}で濃霧により視界が悪化しています`,
+            };
+            
+            const event: VoyageEvent = {
+              id: uuidv4(),
+              type: weatherType as any,
+              message: weatherMessages[weatherType] || `${region}で悪天候が発生しています`,
+              day: state.simulationDay,
+              impact,
+              duration: severity === 'severe' ? 5 : severity === 'moderate' ? 3 : 1,
+              severity: severity as any,
+              affectedRegions: [region],
+            };
+            
+            // Apply to all ships in the region
+            set(prevState => ({
+              activeVoyages: prevState.activeVoyages.map(voyage => {
+                const ship = shipsInRegion.find(s => s.id === voyage.shipId);
+                return ship ? {
+                  ...voyage,
+                  events: [...voyage.events, event],
+                  estimatedDays: voyage.estimatedDays + (impact.delayDays || 0),
+                  costs: {
+                    ...voyage.costs,
+                    fuel: voyage.costs.fuel * (impact.fuelMultiplier || 1),
+                    total: voyage.costs.total * (impact.costMultiplier || 1),
+                  },
+                } : voyage
+              ),
+            }));
+          }
+        }
+      });
+    });
+  },
+
+  updateFuelPrices: () => {
+    const state = get();
+    const factors = FUEL_PRICE_FACTORS;
+    
+    // Base volatility
+    let priceChange = (Math.random() - 0.5) * factors.baseVolatility * 2;
+    
+    // Seasonal effects
+    const seasonalMultiplier = factors.seasonalMultipliers[state.marketConditions.season];
+    priceChange *= seasonalMultiplier;
+    
+    // Geopolitical tension effects
+    const tensionEffect = state.marketConditions.geopoliticalTension * factors.geopoliticalMultiplier;
+    priceChange += tensionEffect;
+    
+    // Global events effects
+    let eventMultiplier = 1.0;
+    state.newGlobalEvents.forEach(event => {
+      if (event.effects.fuelPriceMultiplier && 
+          state.simulationDay >= event.startDay && 
+          state.simulationDay < event.startDay + event.duration) {
+        eventMultiplier *= event.effects.fuelPriceMultiplier;
+      }
+    });
+    
+    // Apply changes
+    const newVLSFO = Math.max(400, state.marketConditions.fuelPrices.VLSFO * (1 + priceChange) * eventMultiplier);
+    const newHFO = Math.max(300, state.marketConditions.fuelPrices.HFO * (1 + priceChange) * eventMultiplier);
+    
+    // Determine trend
+    const priceDiff = newVLSFO - state.marketConditions.fuelPrices.VLSFO;
+    const trend = priceDiff > 10 ? 'rising' : priceDiff < -10 ? 'falling' : 'stable';
+    
+    set(prevState => ({
+      marketConditions: {
+        ...prevState.marketConditions,
+        fuelPrices: {
+          VLSFO: newVLSFO,
+          HFO: newHFO,
+          trend,
+          volatility: Math.min(100, Math.max(10, prevState.marketConditions.fuelPrices.volatility + (Math.random() - 0.5) * 5)),
+          lastChange: state.simulationDay,
+        },
+      },
+      fuelPrice: newVLSFO, // Update global fuel price
+    }));
+  },
+
+  triggerEconomicCycles: () => {
+    const state = get();
+    
+    // Economic cycle transitions (every ~2-3 years with some randomness)
+    if (state.simulationDay % 730 === 0 && Math.random() < 0.3) {
+      const currentClimate = state.marketConditions.economicClimate;
+      let newClimate = currentClimate;
+      
+      // Transition probabilities based on current state
+      const transitions = {
+        recession: { stable: 0.6, growth: 0.3, recession: 0.1 },
+        stable: { recession: 0.2, growth: 0.4, boom: 0.1, stable: 0.3 },
+        growth: { stable: 0.3, boom: 0.4, recession: 0.1, growth: 0.2 },
+        boom: { growth: 0.5, stable: 0.3, recession: 0.2 },
+      };
+      
+      const rand = Math.random();
+      let cumulative = 0;
+      
+      for (const [climate, probability] of Object.entries(transitions[currentClimate])) {
+        cumulative += probability;
+        if (rand < cumulative) {
+          newClimate = climate as any;
+          break;
+        }
+      }
+      
+      if (newClimate !== currentClimate) {
+        const cycleData = ECONOMIC_CYCLES[newClimate];
+        
+        set(prevState => ({
+          marketConditions: {
+            ...prevState.marketConditions,
+            economicClimate: newClimate as any,
+            demandMultipliers: cycleData.demandMultiplier,
+            competitionLevel: Math.min(100, Math.max(0, 
+              prevState.marketConditions.competitionLevel * cycleData.competitionMultiplier
+            )),
+          },
+        }));
+        
+        // Generate news about economic change
+        const economicNews = {
+          recession: '世界経済が不況に突入しました',
+          stable: '経済が安定期に入りました',
+          growth: '経済成長期が始まりました',
+          boom: '経済ブームが到来しました',
+        };
+        
+        get().generateMarketNews('market_entry', 'global', economicNews[newClimate]);
+      }
+    }
+  },
+
+  simulateMarketCompetition: () => {
+    const state = get();
+    
+    // Adjust competition level based on number of companies and market conditions
+    const totalCompanies = state.npcCompanies.length + 1; // +1 for player
+    const baseCompetition = Math.min(100, totalCompanies * 8); // More companies = more competition
+    
+    // Economic climate affects competition
+    const economicMultiplier = {
+      recession: 1.4, // Fierce competition for fewer contracts
+      stable: 1.0,
+      growth: 0.8,
+      boom: 0.6, // Plenty of opportunities
+    }[state.marketConditions.economicClimate];
+    
+    const newCompetitionLevel = Math.min(100, baseCompetition * economicMultiplier);
+    
+    set(prevState => ({
+      marketConditions: {
+        ...prevState.marketConditions,
+        competitionLevel: newCompetitionLevel,
+      },
+    }));
+    
+    // High competition reduces contract availability
+    if (newCompetitionLevel > 80 && Math.random() < 0.1) {
+      // Remove some available contracts (taken by competitors)
+      const availableContracts = state.contracts.filter(c => c.status === 'available');
+      if (availableContracts.length > 3) {
+        const contractToRemove = availableContracts[Math.floor(Math.random() * availableContracts.length)];
+        set(prevState => ({
+          contracts: prevState.contracts.map(c =>
+            c.id === contractToRemove.id ? { ...c, status: 'assigned' as const } : c
+          ),
+        }));
+      }
+    }
+  },
+
   triggerGlobalEvents: () => {
     const state = get();
+    
+    // Check for major global events
+    Object.entries(GLOBAL_EVENT_TEMPLATES).forEach(([eventType, template]) => {
+      if (Math.random() < template.probability) {
+        const duration = template.duration[0] + Math.random() * (template.duration[1] - template.duration[0]);
+        
+        const globalEvent: GlobalEvent = {
+          id: uuidv4(),
+          type: eventType as GlobalEventType,
+          title: template.title,
+          description: template.description,
+          startDay: state.simulationDay,
+          duration: Math.floor(duration),
+          severity: Math.random() < 0.1 ? 'critical' : Math.random() < 0.3 ? 'severe' : 'moderate',
+          effects: template.effects,
+          affectedRegions: template.affectedRegions,
+          chainEvents: template.chainEvents,
+        };
+        
+        set(prevState => ({
+          newGlobalEvents: [...prevState.newGlobalEvents, globalEvent],
+        }));
+        
+        // Generate market news
+        get().generateMarketNews('market_entry', 'global', `${template.title}: ${template.description}`);
+        
+        // Trigger chain events
+        if (template.chainEvents && Math.random() < 0.3) {
+          template.chainEvents.forEach(chainEventType => {
+            if (GLOBAL_EVENT_TEMPLATES[chainEventType]) {
+              setTimeout(() => {
+                const chainTemplate = GLOBAL_EVENT_TEMPLATES[chainEventType];
+                const chainEvent: GlobalEvent = {
+                  id: uuidv4(),
+                  type: chainEventType as GlobalEventType,
+                  title: chainTemplate.title,
+                  description: `${template.title}の影響で${chainTemplate.description}`,
+                  startDay: state.simulationDay + Math.floor(Math.random() * 30),
+                  duration: Math.floor(chainTemplate.duration[0] + Math.random() * (chainTemplate.duration[1] - chainTemplate.duration[0])),
+                  severity: 'moderate',
+                  effects: chainTemplate.effects,
+                  affectedRegions: chainTemplate.affectedRegions,
+                };
+                
+                set(prevState => ({
+                  newGlobalEvents: [...prevState.newGlobalEvents, chainEvent],
+                }));
+              }, 1000);
+            }
+          });
+        }
+      }
+    });
     
     // Seasonal events
     const dayOfYear = state.simulationDay % 365;
@@ -641,6 +922,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         description: `季節の変化により貨物需要が変動しています`,
         startDay: state.simulationDay,
         duration: 90,
+        severity: 'minor',
         effects: {
           demandMultiplier: SEASONAL_DEMAND_MULTIPLIERS[newSeason],
         },
@@ -666,6 +948,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
         description: isPositive ? '世界経済の好況により貨物需要が増加' : '経済不況により貨物需要が減少',
         startDay: state.simulationDay,
         duration: 60,
+        severity: isPositive ? 'moderate' : 'severe',
         effects: {
           demandMultiplier: isPositive ? 
             { Container: 1.3, Car: 1.2, Bulk: 1.1, Oil: 1.1, Passenger: 1.4 } :
@@ -677,6 +960,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
         newGlobalEvents: [...prevState.newGlobalEvents, economicEvent],
       }));
     }
+    
+    // Clean up expired global events
+    set(prevState => ({
+      newGlobalEvents: prevState.newGlobalEvents.filter(event => 
+        state.simulationDay < event.startDay + event.duration
+      ),
+    }));
   },
 
   updateMarketConditions: () => {

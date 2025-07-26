@@ -380,6 +380,135 @@ export const NPC_STRATEGIES = {
   },
 };
 
+// Weather and event probabilities by region and season
+export const REGIONAL_WEATHER_PATTERNS = {
+  'Asia': {
+    spring: { typhoon: 0.02, fog: 0.05, clear: 0.7 },
+    summer: { typhoon: 0.08, storm: 0.1, clear: 0.6 },
+    autumn: { typhoon: 0.05, storm: 0.08, clear: 0.65 },
+    winter: { storm: 0.06, fog: 0.08, clear: 0.7 },
+  },
+  'Europe': {
+    spring: { storm: 0.04, fog: 0.06, clear: 0.75 },
+    summer: { clear: 0.85, storm: 0.02 },
+    autumn: { storm: 0.06, fog: 0.05, clear: 0.7 },
+    winter: { winter_storm: 0.1, fog: 0.08, clear: 0.6 },
+  },
+  'North America': {
+    spring: { storm: 0.05, clear: 0.75 },
+    summer: { clear: 0.8, storm: 0.03 },
+    autumn: { storm: 0.06, clear: 0.7 },
+    winter: { winter_storm: 0.08, clear: 0.65 },
+  },
+};
+
+// Global event templates with realistic probabilities
+export const GLOBAL_EVENT_TEMPLATES = {
+  trade_war: {
+    probability: 0.0005, // 0.05% per day
+    title: '貿易戦争',
+    description: '主要国間の貿易摩擦により関税が引き上げられました',
+    duration: [180, 365], // 6-12 months
+    effects: {
+      demandMultiplier: { Container: 0.8, Car: 0.7, Bulk: 0.9 },
+      contractPriceMultiplier: 1.2,
+    },
+    affectedRegions: ['Asia', 'North America'],
+  },
+  pandemic: {
+    probability: 0.0001, // 0.01% per day (rare but impactful)
+    title: 'パンデミック',
+    description: '世界的な感染症拡大により物流が大幅に制限されています',
+    duration: [365, 730], // 1-2 years
+    effects: {
+      demandMultiplier: { Container: 0.6, Car: 0.4, Passenger: 0.1, Bulk: 0.8 },
+      portEfficiencyMultiplier: 0.7,
+      fuelPriceMultiplier: 0.8,
+    },
+    chainEvents: ['economic_recession'],
+  },
+  canal_blockage: {
+    probability: 0.0002, // 0.02% per day
+    title: '運河封鎖',
+    description: 'スエズ運河で大型船舶が座礁し、航路が封鎖されています',
+    duration: [7, 30], // 1 week to 1 month
+    effects: {
+      demandMultiplier: { Container: 1.3, Oil: 1.4 }, // Alternative routes in high demand
+      fuelPriceMultiplier: 1.2,
+      contractPriceMultiplier: 1.5,
+    },
+    affectedRegions: ['Asia', 'Europe'],
+  },
+  environmental_regulation: {
+    probability: 0.0003, // 0.03% per day
+    title: '環境規制強化',
+    description: 'IMOが新たな排出ガス規制を導入しました',
+    duration: [365, 1825], // 1-5 years (permanent change)
+    effects: {
+      fuelPriceMultiplier: 1.15, // Cleaner fuel costs more
+      maintenanceMultiplier: 1.1, // Compliance costs
+    },
+  },
+  tech_breakthrough: {
+    probability: 0.0001, // 0.01% per day
+    title: '技術革新',
+    description: '新しい船舶推進技術により燃費効率が大幅に改善されました',
+    duration: [730, 3650], // 2-10 years (gradual adoption)
+    effects: {
+      fuelPriceMultiplier: 0.9, // More efficient = less fuel needed
+      maintenanceMultiplier: 0.95,
+    },
+  },
+  geopolitical_crisis: {
+    probability: 0.0004, // 0.04% per day
+    title: '地政学的危機',
+    description: '地域紛争により海上保険料が上昇しています',
+    duration: [90, 365], // 3-12 months
+    effects: {
+      insuranceMultiplier: 1.5,
+      riskMultiplier: 1.3,
+    },
+    affectedRegions: ['Middle East', 'Asia'],
+  },
+};
+
+// Fuel price volatility factors
+export const FUEL_PRICE_FACTORS = {
+  baseVolatility: 0.02, // 2% daily variation
+  seasonalMultipliers: {
+    spring: 1.0,
+    summer: 1.1, // Higher demand for travel
+    autumn: 1.05,
+    winter: 1.15, // Heating demand
+  },
+  geopoliticalMultiplier: 0.001, // Per tension point
+  supplyShockMultiplier: 0.05, // Major events
+};
+
+// Economic cycle parameters
+export const ECONOMIC_CYCLES = {
+  recession: {
+    demandMultiplier: { Container: 0.7, Car: 0.6, Bulk: 0.8, Oil: 0.9, Passenger: 0.5 },
+    contractPriceMultiplier: 0.8,
+    competitionMultiplier: 1.3, // More competition for fewer contracts
+  },
+  stable: {
+    demandMultiplier: { Container: 1.0, Car: 1.0, Bulk: 1.0, Oil: 1.0, Passenger: 1.0 },
+    contractPriceMultiplier: 1.0,
+    competitionMultiplier: 1.0,
+  },
+  growth: {
+    demandMultiplier: { Container: 1.2, Car: 1.3, Bulk: 1.1, Oil: 1.1, Passenger: 1.4 },
+    contractPriceMultiplier: 1.1,
+    competitionMultiplier: 0.9,
+  },
+  boom: {
+    demandMultiplier: { Container: 1.5, Car: 1.6, Bulk: 1.3, Oil: 1.2, Passenger: 1.8 },
+    contractPriceMultiplier: 1.3,
+    competitionMultiplier: 0.7,
+  },
+};
+
 // Distance calculation helper (simplified great circle)
 export const calculateDistance = (port1: Port, port2: Port): number => {
   const R = 3440.065; // Earth radius in nautical miles
