@@ -46,7 +46,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, items }) => {
 };
 
 const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) => {
-  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract } = useGameStore();
+  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract, simulationDay } = useGameStore();
   const [showAutoModal, setShowAutoModal] = useState(false);
 
   const isShip = 'specId' in item;
