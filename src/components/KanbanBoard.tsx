@@ -418,8 +418,7 @@ export const KanbanBoard: React.FC = () => {
     generateContracts,
     activeVoyages,
     ports,
-    shipSpecs,
-    simulationDay
+    shipSpecs
   } = useGameStore();
   
   const [activeId, setActiveId] = useState<string | null>(null);
