@@ -610,6 +610,8 @@ export const KanbanBoard: React.FC = () => {
                 
                 const voyage = activeVoyages.find(v => v.shipId === ship.id);
                 const progress = voyage ? voyage.currentProgress * 100 : 0;
+               const originPort = ports.find(p => p.LOCODE === contract.origin);
+               const destPort = ports.find(p => p.LOCODE === contract.destination);
                 
                 return (
                   <div key={`${ship.id}-${contract.id}`} className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
@@ -618,6 +620,10 @@ export const KanbanBoard: React.FC = () => {
                       <p className="text-sm text-slate-600 capitalize">
                         {contract.cargoType} • {contract.amount.toLocaleString()} 単位
                       </p>
+                     <div className="flex items-center gap-1 text-sm text-blue-600 mt-1">
+                       <MapPin size={14} />
+                       <span>{originPort?.name} → {destPort?.name}</span>
+                     </div>
                     </div>
                     
                     <div className="mb-3">
@@ -633,6 +639,13 @@ export const KanbanBoard: React.FC = () => {
                       </div>
                     </div>
                     
+                   <div className="text-xs text-slate-500 mb-2">
+                     <div className="flex justify-between">
+                       <span>距離: {contract.distanceNm.toFixed(0)} nm</span>
+                       <span>予想収益: {formatCurrency(contract.amount * contract.freightRate)}</span>
+                     </div>
+                   </div>
+                   
                     {voyage && voyage.events.length > 0 && (
                       <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-sm">
                         <span className="text-yellow-800">
@@ -640,10 +653,6 @@ export const KanbanBoard: React.FC = () => {
                         </span>
                       </div>
                     )}
-                    
-                    <div className="text-xs text-slate-500 mt-2">
-                      {contract.distanceNm.toFixed(0)} nm • 残り{Math.max(0, contract.expiresDay - (simulationDay - contract.createdDay))}日
-                    </div>
                   </div>
                 );
               })}
