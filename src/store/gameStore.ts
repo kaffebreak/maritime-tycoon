@@ -192,6 +192,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // Update voyages and trigger events
     get().updateVoyages();
     get().updateContractExpiration();
+    get().updateContractExpiration();
     get().triggerRandomEvents();
     get().processAutoContracts();
   },
@@ -239,7 +240,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     set(prevState => ({
       contracts: [
-        ...prevState.contracts.filter(c => c.status === 'assigned' || c.status === 'completed'),
+        ...prevState.contracts.filter(c => c.status !== 'available' && c.status !== 'expired'),
         ...newContracts
       ],
     }));
