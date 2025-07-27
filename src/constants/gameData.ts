@@ -33,9 +33,31 @@ export const CREW_COSTS = {
 };
 
 export const MAINTENANCE_INTERVALS = {
-  minor: 90,       // days
-  major: 365,      // days
-  drydock: 1825,   // days (5 years)
+  minor: 90,       // days - routine maintenance
+  major: 365,      // days - major overhaul
+  drydock: 1825,   // days (5 years) - complete refit
+  emergency: 0,    // immediate - breakdown repair
+};
+
+export const MAINTENANCE_COSTS = {
+  minor: 0.002,    // 0.2% of build cost
+  major: 0.015,    // 1.5% of build cost
+  drydock: 0.08,   // 8% of build cost
+  emergency: 0.025, // 2.5% of build cost (expensive!)
+};
+
+export const MAINTENANCE_DURATION = {
+  minor: 3,        // 3 days
+  major: 14,       // 2 weeks
+  drydock: 45,     // 6-7 weeks
+  emergency: 7,    // 1 week
+};
+
+export const MAINTENANCE_CONDITION_RESTORE = {
+  minor: 15,       // +15 condition points
+  major: 40,       // +40 condition points
+  drydock: 100,    // restore to 100%
+  emergency: 25,   // +25 condition points
 };
 
 export const SAMPLE_PORTS: Port[] = [

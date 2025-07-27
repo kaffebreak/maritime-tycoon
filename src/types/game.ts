@@ -10,6 +10,8 @@ export type GlobalEventType = 'fuel_surge' | 'economic_boom' | 'recession' | 'po
 export type AchievementType = 'first_voyage' | 'profit_milestone' | 'fleet_size' | 'route_master' | 'efficiency_expert';
 export type CompanyType = 'player' | 'npc';
 export type NPCStrategy = 'aggressive' | 'conservative' | 'balanced' | 'opportunistic';
+export type MaintenanceType = 'minor' | 'major' | 'drydock' | 'emergency';
+export type MaintenanceStatus = 'none' | 'scheduled' | 'in_progress' | 'completed';
 
 export interface Port {
   LOCODE: string;
@@ -64,6 +66,14 @@ export interface ShipInstance {
   condition: number; // 0-100, affects performance and costs
   lastMaintenance: number; // simulation day
   totalDistance: number; // nautical miles traveled
+  maintenanceStatus: MaintenanceStatus;
+  scheduledMaintenance?: {
+    type: MaintenanceType;
+    scheduledDay: number;
+    estimatedDays: number;
+    estimatedCost: number;
+  };
+  maintenanceHistory: MaintenanceRecord[];
   crew: {
     captain: CrewMember;
     engineers: CrewMember[];
@@ -86,6 +96,18 @@ export interface CrewMember {
   salary: number; // per day
   experience: number; // years
   specialization: 'navigation' | 'engineering' | 'cargo' | 'general';
+}
+
+export interface MaintenanceRecord {
+  id: string;
+  type: MaintenanceType;
+  startDay: number;
+  completedDay: number;
+  cost: number;
+  conditionBefore: number;
+  conditionAfter: number;
+  description: string;
+  port: string;
 }
 
 export interface CargoContract {
