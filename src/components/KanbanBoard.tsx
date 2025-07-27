@@ -420,6 +420,75 @@ const ShipCompatibilityIndicator: React.FC<{ ship: ShipInstance; contract: Cargo
   );
 };
 
+const ShipConditionIndicator: React.FC<{ ship: ShipInstance }> = ({ ship }) => {
+  return (
+    <div className="flex items-center gap-1">
+      <span className={`text-xs px-2 py-1 rounded-full ${
+        ship.condition >= 80 ? 'bg-green-100 text-green-700' :
+        ship.condition >= 60 ? 'bg-yellow-100 text-yellow-700' :
+        ship.condition >= 40 ? 'bg-orange-100 text-orange-700' :
+        'bg-red-100 text-red-700'
+      }`}>
+        状態: {ship.condition.toFixed(0)}%
+      </span>
+    </div>
+  );
+};
+
+const AssignedPairCard: React.FC<{ ship: ShipInstance; contract: CargoContract }> = ({ ship, contract }) => {
+  const { activeVoyages, ports, formatCurrency } = useGameStore();
+  
+  const voyage = activeVoyages.find(v => v.shipId === ship.id);
+  const progress = voyage ? voyage.currentProgress * 100 : 0;
+  const originPort = ports.find(p => p.LOCODE === contract.origin);
+  const destPort = ports.find(p => p.LOCODE === contract.destination);
+  
+  return (
+    <div className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
+      <div className="mb-3">
+        <h4 className="font-medium text-slate-800">{ship.name}</h4>
+        <p className="text-sm text-slate-600 capitalize">
+          {contract.cargoType} • {contract.amount.toLocaleString()} 単位
+        </p>
+        <div className="flex items-center gap-1 text-sm text-blue-600 mt-1">
+          <MapPin size={14} />
+          <span>{originPort?.name} → {destPort?.name}</span>
+        </div>
+      </div>
+      
+      <div className="mb-3">
+        <div className="flex justify-between text-sm text-slate-600 mb-1">
+          <span>進捗</span>
+          <span>{progress.toFixed(1)}%</span>
+        </div>
+        <div className="w-full bg-slate-200 rounded-full h-2">
+          <div 
+            className="bg-blue-600 h-2 rounded-full transition-all duration-1000"
+            style={{ width: `${Math.min(progress, 100)}%` }}
+          />
+        </div>
+      </div>
+      
+      <div className="text-xs text-slate-500 mb-2">
+        <div className="flex justify-between">
+          <span>距離: {contract.distanceNm.toFixed(0)} nm</span>
+          <span>予想収益: {formatCurrency(contract.amount * contract.freightRate)}</span>
+        </div>
+      </div>
+      
+      <ShipConditionIndicator ship={ship} />
+      
+      {voyage && voyage.events.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-sm mt-2">
+          <span className="text-yellow-800">
+            {voyage.events[voyage.events.length - 1].message}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const KanbanBoard: React.FC = () => {
   const { 
     fleet, 
@@ -508,6 +577,36 @@ export const KanbanBoard: React.FC = () => {
 
   const shipTypes = ['all', 'Container', 'PCTC', 'Tanker', 'Bulker', 'Cruise'];
   const continents = ['all', ...Array.from(new Set(ports.map(p => p.continent)))];
+
+  const AssignedColumn: React.FC = () => {
+    return (
+      <div className="bg-slate-50 rounded-lg p-4 min-h-[600px] w-80">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-slate-800 flex items-center gap-2">
+            <MapPin size={20} className="text-orange-600" />
+            航行中
+          </h3>
+          <span className="bg-slate-200 text-slate-600 px-2 py-1 rounded-full text-sm">
+            {assignedPairs.length}
+          </span>
+        </div>
+        
+        <div className="space-y-4">
+          {assignedPairs.map(({ ship, contract }) => {
+            if (!ship || !contract) return null;
+            
+            return (
+              <AssignedPairCard 
+                key={`${ship.id}-${contract.id}`}
+                ship={ship}
+                contract={contract}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="p-6">
@@ -598,81 +697,7 @@ export const KanbanBoard: React.FC = () => {
             onDrop={() => {}}
           />
           
-          <div className="bg-slate-50 rounded-lg p-4 min-h-[600px] w-80">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <MapPin size={20} className="text-orange-600" />
-                航行中
-              </h3>
-              <span className="bg-slate-200 text-slate-600 px-2 py-1 rounded-full text-sm">
-                {assignedPairs.length}
-              </span>
-            </div>
-            
-            <div className="space-y-4">
-              {assignedPairs.map(({ ship, contract }) => {
-                if (!ship || !contract) return null;
-                
-                const voyage = activeVoyages.find(v => v.shipId === ship.id);
-                const progress = voyage ? voyage.currentProgress * 100 : 0;
-               const originPort = ports.find(p => p.LOCODE === contract.origin);
-               const destPort = ports.find(p => p.LOCODE === contract.destination);
-                
-                return (
-                  <div key={`${ship.id}-${contract.id}`} className="bg-white rounded-lg p-4 shadow-sm border border-slate-200">
-                    <div className="mb-3">
-                      <h4 className="font-medium text-slate-800">{ship.name}</h4>
-                      <p className="text-sm text-slate-600 capitalize">
-                        {contract.cargoType} • {contract.amount.toLocaleString()} 単位
-                      </p>
-                     <div className="flex items-center gap-1 text-sm text-blue-600 mt-1">
-                       <MapPin size={14} />
-                       <span>{originPort?.name} → {destPort?.name}</span>
-                     </div>
-                    </div>
-                    
-                    <div className="mb-3">
-                      <div className="flex justify-between text-sm text-slate-600 mb-1">
-                        <span>進捗</span>
-                        <span>{progress.toFixed(1)}%</span>
-                      </div>
-                      <div className="w-full bg-slate-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-1000"
-                          style={{ width: `${Math.min(progress, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                    
-                   <div className="text-xs text-slate-500 mb-2">
-                     <div className="flex justify-between">
-                       <span>距離: {contract.distanceNm.toFixed(0)} nm</span>
-                       <span>予想収益: {formatCurrency(contract.amount * contract.freightRate)}</span>
-                     </div>
-                   </div>
-                   
-                    {voyage && voyage.events.length > 0 && (
-                      <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-sm">
-                        <span className="text-yellow-800">
-                          {voyage.events[voyage.events.length - 1].message}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      ship.condition >= 80 ? 'bg-green-100 text-green-700' :
-                      ship.condition >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                      ship.condition >= 40 ? 'bg-orange-100 text-orange-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      状態: {ship.condition.toFixed(0)}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <AssignedColumn />
         </div>
 
         <DragOverlay>
