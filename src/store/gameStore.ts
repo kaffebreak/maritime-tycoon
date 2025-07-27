@@ -626,10 +626,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (profitMargin >= ship.autoSettings.minProfitMargin) {
                 // Auto-assign the contract
                 setTimeout(() => {
-                  get().assignContract(suitableContract.id, ship.id);
+              if (ship.status === 'maintenance' && ship.etaDay <= 0) {
                 }, 100); // Small delay to avoid state conflicts
               }
-            }
+            });
           }
         }
       });
