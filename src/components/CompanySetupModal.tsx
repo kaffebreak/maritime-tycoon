@@ -88,7 +88,7 @@ export const CompanySetupModal: React.FC<CompanySetupModalProps> = ({ onComplete
               <DollarSign size={16} className="inline mr-2" />
               難易度選択
             </label>
-            <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-3">
               {(Object.keys(difficultySettings) as Array<keyof typeof difficultySettings>).map((level) => {
                 const setting = difficultySettings[level];
                 return (
@@ -113,6 +113,11 @@ export const CompanySetupModal: React.FC<CompanySetupModalProps> = ({ onComplete
                     <p className={`text-sm ${difficulty === level ? setting.color : 'text-slate-600'}`}>
                       {setting.description}
                     </p>
+                    <div className={`text-xs mt-2 ${difficulty === level ? setting.color : 'text-slate-500'}`}>
+                      {level === 'Easy' && 'イベント発生率: -50%, 効果: -50%'}
+                      {level === 'Normal' && 'イベント発生率: 標準, 効果: 標準'}
+                      {level === 'Hard' && 'イベント発生率: +100%, 効果: +50%'}
+                    </div>
                   </button>
                 );
               })}
