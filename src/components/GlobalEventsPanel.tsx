@@ -46,7 +46,22 @@ export const GlobalEventsPanel: React.FC = () => {
       {/* Market Conditions */}
       <div className="mb-6">
         <h3 className="font-bold text-slate-800 mb-3">市場状況</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">🎯</span>
+              <span className="font-medium text-purple-800">難易度</span>
+            </div>
+            <div className="text-sm text-purple-600">
+              {useGameStore.getState().difficulty} モード
+            </div>
+            <div className="text-xs text-purple-500 mt-1">
+              {useGameStore.getState().difficulty === 'Easy' && 'イベント発生率: -50%, 効果: -50%'}
+              {useGameStore.getState().difficulty === 'Normal' && 'イベント発生率: 標準, 効果: 標準'}
+              {useGameStore.getState().difficulty === 'Hard' && 'イベント発生率: +100%, 効果: +50%'}
+            </div>
+          </div>
+          
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">{getSeasonIcon(marketConditions.season)}</span>

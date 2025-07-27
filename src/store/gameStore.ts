@@ -17,6 +17,7 @@ import {
   FUEL_PRICE_FACTORS,
   ECONOMIC_CYCLES,
   RISK_ZONES,
+  DIFFICULTY_EVENT_MODIFIERS,
   RANDOM_EVENTS
 } from '../constants/gameData';
 import { v4 as uuidv4 } from 'uuid';
