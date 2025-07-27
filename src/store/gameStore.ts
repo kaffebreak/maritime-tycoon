@@ -256,28 +256,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
         preferredCargoTypes: ['Container'],
         riskTolerance: 'medium',
       },
-      condition: 100,
-      lastMaintenance: get().simulationDay,
-      totalDistance: 0,
-      maintenanceStatus: 'none' as const,
-      maintenanceHistory: [],
-      crew: {
-        captain: {
-          id: `crew-${Date.now()}-captain`,
-          name: 'Captain Smith',
-          role: 'captain',
-          experience: 5,
-          salary: 8000,
-          morale: 80,
-          skills: {
-            navigation: 75,
-            leadership: 70,
-            emergency: 65,
-          },
-        },
-        officers: [],
-        crew: [],
-      },
     };
 
     const initialContracts = Array.from({ length: 12 }, () => {
@@ -448,6 +426,39 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const currentCosts = get().calculateVoyageCosts(ship.id, current.id);
           const bestMargin = ((best.amount * best.freightRate - bestCosts.total) / (best.amount * best.freightRate)) * 100;
           const currentMargin = ((current.amount * current.freightRate - currentCosts.total) / (current.amount * current.freightRate)) * 100;
+            
+            // Check for emergency maintenance needs
+            if (ship.condition < 20 && Math.random() < 0.1) {
+              ship.status = 'maintenance';
+              ship.maintenanceStatus = 'scheduled';
+              ship.scheduledMaintenance = {
+                type: 'emergency',
+                scheduledDay: simulationDay,
+                estimatedDays: MAINTENANCE_DURATION.emergency,
+                estimatedCost: shipSpecs.find(s => s.id === ship.specId)?.buildCost * MAINTENANCE_COSTS.emergency || 0,
+              };
+            }
+          }
+          
+          // Complete maintenance if due
+          if (ship.status === 'maintenance' && ship.etaDay > 0 && simulationDay >= ship.etaDay) {
+            get().completeMaintenance(ship.id);
+          }
+          
+          // Check for scheduled maintenance needs
+          if (ship.status === 'idle' && ship.maintenanceStatus === 'none') {
+            const daysSinceLastMaintenance = simulationDay - ship.lastMaintenance;
+            
+            if (daysSinceLastMaintenance >= MAINTENANCE_INTERVALS.drydock) {
+              // Auto-schedule drydock maintenance
+              get().scheduleMaintenance(ship.id, 'drydock');
+            } else if (daysSinceLastMaintenance >= MAINTENANCE_INTERVALS.major) {
+              // Auto-schedule major maintenance
+              get().scheduleMaintenance(ship.id, 'major');
+            } else if (daysSinceLastMaintenance >= MAINTENANCE_INTERVALS.minor) {
+              // Auto-schedule minor maintenance
+              get().scheduleMaintenance(ship.id, 'minor');
+            }
           return currentMargin > bestMargin ? current : best;
         });
 
