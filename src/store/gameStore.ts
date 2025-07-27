@@ -303,8 +303,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().checkAchievements();
     get().payLoanInstallments();
     get().checkMaintenanceNeeds();
-    get().payLoanInstallments();
-    get().checkMaintenanceNeeds();
     get().processAutoContracts();
   },
 
