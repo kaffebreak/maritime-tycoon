@@ -15,7 +15,9 @@ import {
   REGIONAL_WEATHER_PATTERNS,
   GLOBAL_EVENT_TEMPLATES,
   FUEL_PRICE_FACTORS,
-  ECONOMIC_CYCLES
+  ECONOMIC_CYCLES,
+  RISK_ZONES,
+  RANDOM_EVENTS
 } from '../constants/gameData';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -46,6 +48,8 @@ interface GameStore extends GameState {
   updateFuelPrices: () => void;
   triggerEconomicCycles: () => void;
   simulateMarketCompetition: () => void;
+  triggerDetailedRandomEvents: () => void;
+  isShipInRiskZone: (shipId: string) => string | null;
   
   // Utilities
   formatCurrency: (amount: number) => string;
@@ -304,6 +308,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().payLoanInstallments();
     get().checkMaintenanceNeeds();
     get().processAutoContracts();
+    get().triggerDetailedRandomEvents();
   },
 
   purchaseShip: (specId, name) => {

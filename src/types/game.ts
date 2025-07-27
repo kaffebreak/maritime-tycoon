@@ -6,7 +6,7 @@ export type Difficulty = 'Easy' | 'Normal' | 'Hard';
 export type GameSpeed = 0 | 1 | 2 | 5;
 export type WeatherCondition = 'clear' | 'rough' | 'storm' | 'fog';
 export type SeasonType = 'spring' | 'summer' | 'autumn' | 'winter';
-export type GlobalEventType = 'fuel_surge' | 'economic_boom' | 'recession' | 'port_strike' | 'piracy_alert' | 'seasonal_demand' | 'trade_war' | 'pandemic' | 'canal_blockage' | 'environmental_regulation' | 'tech_breakthrough' | 'geopolitical_crisis';
+export type GlobalEventType = 'fuel_surge' | 'economic_boom' | 'recession' | 'port_strike' | 'piracy_alert' | 'seasonal_demand' | 'trade_war' | 'pandemic' | 'canal_blockage' | 'environmental_regulation' | 'tech_breakthrough' | 'geopolitical_crisis' | 'weather_event' | 'demand_surge';
 export type AchievementType = 'first_voyage' | 'profit_milestone' | 'fleet_size' | 'route_master' | 'efficiency_expert';
 export type CompanyType = 'player' | 'npc';
 export type NPCStrategy = 'aggressive' | 'conservative' | 'balanced' | 'opportunistic';
@@ -140,6 +140,8 @@ export interface VoyageEvent {
   duration: number;
   severity: 'minor' | 'moderate' | 'severe' | 'critical';
   affectedRegions?: string[];
+  riskZone?: string;
+  cargoType?: CargoType;
 }
 
 export interface GlobalEvent {

@@ -294,6 +294,89 @@ export const EVENT_PROBABILITIES = {
   demand_surge: 0.002, // 0.2% per cargo type per day
 };
 
+// Risk zones for piracy and other maritime threats
+export const RISK_ZONES = {
+  'Gulf of Aden': {
+    name: 'アデン湾・バブエルマンデブ海峡',
+    coordinates: { lat: 12.5, lon: 43.5 },
+    pirateRisk: 0.8, // High risk
+    affectedPorts: ['SAJNA', 'DJJIB', 'YEHOD'], // Jeddah, Djibouti, Hodeidah
+  },
+  'Strait of Malacca': {
+    name: 'マラッカ海峡',
+    coordinates: { lat: 2.5, lon: 102.0 },
+    pirateRisk: 0.4, // Medium risk
+    affectedPorts: ['SGSIN', 'MYPKG', 'IDBLW'], // Singapore, Port Klang, Belawan
+  },
+  'Gulf of Guinea': {
+    name: 'ギニア湾',
+    coordinates: { lat: 0.0, lon: 5.0 },
+    pirateRisk: 0.9, // Very high risk
+    affectedPorts: ['NGLAG', 'GHLTE', 'CIABJ'], // Lagos, Tema, Abidjan
+  },
+};
+
+// Detailed random events based on specification
+export const RANDOM_EVENTS = {
+  E1: {
+    id: 'E1',
+    name: '悪天候',
+    probability: 0.04, // 4% per ship per day
+    scope: 'ship',
+    effects: {
+      voyageDelayMultiplier: 1.2, // +20% voyage time
+    },
+    duration: 1, // Immediate effect (1 day)
+    severity: 'moderate' as const,
+  },
+  E2: {
+    id: 'E2',
+    name: '港ストライキ',
+    probability: 0.005, // 0.5% per port per day
+    scope: 'port',
+    effects: {
+      portClosed: true,
+      dockClosed: true,
+    },
+    duration: 7, // 7 days
+    severity: 'severe' as const,
+  },
+  E3: {
+    id: 'E3',
+    name: '海賊被害',
+    probability: 0.002, // 0.2% per ship in risk zones
+    scope: 'ship_risk_zone',
+    effects: {
+      voyageDelayMultiplier: 1.3, // +30% delay
+      insuranceMultiplier: 1.005, // +0.5% insurance
+    },
+    duration: 1, // Immediate
+    severity: 'severe' as const,
+  },
+  E4: {
+    id: 'E4',
+    name: '燃料高騰',
+    probability: 0.001, // 0.1% global per day
+    scope: 'global',
+    effects: {
+      fuelPriceMultiplier: 1.5, // ×1.5 fuel price
+    },
+    duration: 7, // 7 days
+    severity: 'critical' as const,
+  },
+  E5: {
+    id: 'E5',
+    name: '需要急増',
+    probability: 0.002, // 0.2% per cargo type per day
+    scope: 'cargo_type',
+    effects: {
+      freightRateMultiplier: 1.3, // +30% freight rate
+    },
+    duration: 10, // 10 days
+    severity: 'moderate' as const,
+  },
+};
+
 export const DIFFICULTY_MULTIPLIERS = {
   Easy: { probability: 0.5, effect: 0.5 },
   Normal: { probability: 1.0, effect: 1.0 },
