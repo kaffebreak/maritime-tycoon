@@ -428,15 +428,17 @@ const ShipCompatibilityIndicator: React.FC<{ ship: ShipInstance; contract: Cargo
 };
 
 const ShipConditionIndicator: React.FC<{ ship: ShipInstance }> = ({ ship }) => {
+  const condition = ship.condition || 100; // Fallback to 100 if undefined
+  
   return (
     <div className="flex items-center gap-1">
       <span className={`text-xs px-2 py-1 rounded-full ${
-        ship.condition >= 80 ? 'bg-green-100 text-green-700' :
-        ship.condition >= 60 ? 'bg-yellow-100 text-yellow-700' :
-        ship.condition >= 40 ? 'bg-orange-100 text-orange-700' :
+        condition >= 80 ? 'bg-green-100 text-green-700' :
+        condition >= 60 ? 'bg-yellow-100 text-yellow-700' :
+        condition >= 40 ? 'bg-orange-100 text-orange-700' :
         'bg-red-100 text-red-700'
       }`}>
-        状態: {ship.condition.toFixed(0)}%
+        状態: {condition.toFixed(0)}%
       </span>
     </div>
   );
