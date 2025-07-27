@@ -1177,6 +1177,182 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }));
   },
 
+  triggerDetailedRandomEvents: () => {
+    const state = get();
+    const multiplier = DIFFICULTY_MULTIPLIERS[state.difficulty];
+
+    // E1: 悪天候 (4% per ship per day)
+    state.fleet.filter(s => s.status === 'sailing').forEach(ship => {
+      if (Math.random() < RANDOM_EVENTS.E1.probability * multiplier.probability) {
+        const event: VoyageEvent = {
+          id: uuidv4(),
+          type: 'weather',
+          message: `${ship.name}が悪天候に遭遇し、航行が遅延しています`,
+          day: state.simulationDay,
+          impact: { 
+            delayDays: 1,
+            costMultiplier: RANDOM_EVENTS.E1.effects.voyageDelayMultiplier 
+          },
+          duration: RANDOM_EVENTS.E1.duration,
+          severity: RANDOM_EVENTS.E1.severity,
+        };
+
+        set(prevState => ({
+          activeVoyages: prevState.activeVoyages.map(v =>
+            v.shipId === ship.id
+              ? { 
+                  ...v, 
+                  events: [...v.events, event],
+                  estimatedDays: v.estimatedDays * RANDOM_EVENTS.E1.effects.voyageDelayMultiplier
+                }
+              : v
+          ),
+        }));
+      }
+    });
+
+    // E2: 港ストライキ (0.5% per port per day)
+    state.ports.forEach(port => {
+      if (Math.random() < RANDOM_EVENTS.E2.probability * multiplier.probability) {
+        const event: GlobalEvent = {
+          id: uuidv4(),
+          type: 'port_strike',
+          title: `${port.name}港ストライキ`,
+          description: `${port.name}港で労働争議が発生し、荷役作業が停止しています`,
+          startDay: state.simulationDay,
+          duration: RANDOM_EVENTS.E2.duration,
+          severity: RANDOM_EVENTS.E2.severity,
+          effects: {
+            portEfficiencyMultiplier: 0, // Port completely closed
+          },
+          affectedRegions: [port.continent],
+        };
+
+        set(prevState => ({
+          newGlobalEvents: [...prevState.newGlobalEvents, event],
+        }));
+
+        get().generateMarketNews('port_strike', 'global', `${port.name}港でストライキが発生`);
+      }
+    });
+
+    // E3: 海賊被害 (0.2% per ship in risk zones)
+    state.fleet.filter(s => s.status === 'sailing').forEach(ship => {
+      const riskZone = get().isShipInRiskZone(ship.id);
+      if (riskZone && Math.random() < RANDOM_EVENTS.E3.probability * multiplier.probability) {
+        const isDelay = Math.random() < 0.7; // 70% chance for delay, 30% for insurance cost
+        
+        const event: VoyageEvent = {
+          id: uuidv4(),
+          type: 'piracy',
+          message: isDelay 
+            ? `${ship.name}が${riskZone}で海賊の脅威により迂回航行を余儀なくされています`
+            : `${ship.name}が${riskZone}で海賊被害を受け、保険料が上昇しました`,
+          day: state.simulationDay,
+          impact: isDelay 
+            ? { delayDays: 2, costMultiplier: RANDOM_EVENTS.E3.effects.voyageDelayMultiplier }
+            : { insuranceMultiplier: RANDOM_EVENTS.E3.effects.insuranceMultiplier },
+          duration: RANDOM_EVENTS.E3.duration,
+          severity: RANDOM_EVENTS.E3.severity,
+          riskZone,
+        };
+
+        set(prevState => ({
+          activeVoyages: prevState.activeVoyages.map(v =>
+            v.shipId === ship.id
+              ? { 
+                  ...v, 
+                  events: [...v.events, event],
+                  estimatedDays: isDelay ? v.estimatedDays * RANDOM_EVENTS.E3.effects.voyageDelayMultiplier : v.estimatedDays,
+                  costs: isDelay ? v.costs : {
+                    ...v.costs,
+                    insurance: v.costs.insurance * RANDOM_EVENTS.E3.effects.insuranceMultiplier,
+                    total: v.costs.total * RANDOM_EVENTS.E3.effects.insuranceMultiplier,
+                  }
+                }
+              : v
+          ),
+        }));
+      }
+    });
+
+    // E4: 燃料高騰 (0.1% global per day)
+    if (Math.random() < RANDOM_EVENTS.E4.probability * multiplier.probability) {
+      const event: GlobalEvent = {
+        id: uuidv4(),
+        type: 'fuel_surge',
+        title: '燃料価格急騰',
+        description: '地政学的要因により燃料価格が急激に上昇しています',
+        startDay: state.simulationDay,
+        duration: RANDOM_EVENTS.E4.duration,
+        severity: RANDOM_EVENTS.E4.severity,
+        effects: {
+          fuelPriceMultiplier: RANDOM_EVENTS.E4.effects.fuelPriceMultiplier,
+        },
+      };
+
+      set(prevState => ({
+        newGlobalEvents: [...prevState.newGlobalEvents, event],
+        fuelPrice: prevState.fuelPrice * RANDOM_EVENTS.E4.effects.fuelPriceMultiplier,
+      }));
+
+      get().generateMarketNews('fuel_surge', 'global', '燃料価格が50%急騰');
+    }
+
+    // E5: 需要急増 (0.2% per cargo type per day)
+    const cargoTypes: CargoType[] = ['Container', 'Car', 'Bulk', 'Oil', 'Passenger'];
+    cargoTypes.forEach(cargoType => {
+      if (Math.random() < RANDOM_EVENTS.E5.probability * multiplier.probability) {
+        const event: GlobalEvent = {
+          id: uuidv4(),
+          type: 'demand_surge',
+          title: `${cargoType}需要急増`,
+          description: `${cargoType}貨物の需要が急激に増加し、運賃が上昇しています`,
+          startDay: state.simulationDay,
+          duration: RANDOM_EVENTS.E5.duration,
+          severity: RANDOM_EVENTS.E5.severity,
+          effects: {
+            demandMultiplier: { [cargoType]: RANDOM_EVENTS.E5.effects.freightRateMultiplier } as Record<CargoType, number>,
+          },
+          cargoType,
+        };
+
+        set(prevState => ({
+          newGlobalEvents: [...prevState.newGlobalEvents, event],
+        }));
+
+        get().generateMarketNews('demand_surge', 'global', `${cargoType}貨物の需要が急増`);
+      }
+    });
+  },
+
+  isShipInRiskZone: (shipId) => {
+    const state = get();
+    const ship = state.fleet.find(s => s.id === shipId);
+    if (!ship || ship.status !== 'sailing') return null;
+
+    const voyage = state.activeVoyages.find(v => v.shipId === shipId);
+    if (!voyage) return null;
+
+    const contract = state.contracts.find(c => c.id === voyage.contractId);
+    if (!contract) return null;
+
+    const originPort = state.ports.find(p => p.LOCODE === contract.origin);
+    const destPort = state.ports.find(p => p.LOCODE === contract.destination);
+    if (!originPort || !destPort) return null;
+
+    // Check if route passes through risk zones
+    for (const [zoneName, zone] of Object.entries(RISK_ZONES)) {
+      // Simplified check: if origin or destination is in affected ports
+      if (zone.affectedPorts.includes(contract.origin) || 
+          zone.affectedPorts.includes(contract.destination)) {
+        return zone.name;
+      }
+    }
+
+    return null;
+  },
+
   calculateVoyageCosts: (shipId, contractId) => {
     const state = get();
     const ship = state.fleet.find(s => s.id === shipId);
@@ -1380,6 +1556,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       marketNews: [newsItem, ...prevState.marketNews.slice(0, 19)], // Keep last 20 news items
     }));
   },
+
   formatCurrency: (amount) => {
     return new Intl.NumberFormat('ja-JP', {
       style: 'currency',

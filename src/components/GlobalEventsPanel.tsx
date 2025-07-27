@@ -112,6 +112,20 @@ export const GlobalEventsPanel: React.FC = () => {
                     </div>
                   </div>
                   
+                  {/* Risk Zone Display */}
+                  {event.type === 'piracy_alert' && event.affectedRegions && (
+                    <div className="mb-2 text-sm text-red-600">
+                      <span className="font-medium">⚠️ 危険海域:</span> {event.affectedRegions.join(', ')}
+                    </div>
+                  )}
+                  
+                  {/* Cargo Type Display */}
+                  {event.cargoType && (
+                    <div className="mb-2 text-sm text-blue-600">
+                      <span className="font-medium">📦 対象貨物:</span> {event.cargoType}
+                    </div>
+                  )}
+                  
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-500">
                       残り {remainingDays} 日

@@ -79,9 +79,15 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
           </div>
           <div className="flex items-center gap-2">
             {ship.autoContract && (
-              <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700">
-                自動
-              </span>
+              <div className="text-yellow-800">
+                <div className="font-medium mb-1">最新イベント:</div>
+                <div>{voyage.events[voyage.events.length - 1].message}</div>
+                {voyage.events[voyage.events.length - 1].riskZone && (
+                  <div className="text-xs text-red-600 mt-1">
+                    危険海域: {voyage.events[voyage.events.length - 1].riskZone}
+                  </div>
+                )}
+              </div>
             )}
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
               ship.status === 'idle' ? 'bg-green-100 text-green-700' :
