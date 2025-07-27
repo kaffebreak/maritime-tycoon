@@ -249,13 +249,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ageYear: 0,
       maintenanceCost: 0,
       insuranceCost: 0,
-      // Auto contract settings with proper defaults
       autoContract: false,
       autoSettings: {
         minProfitMargin: 15,
         maxDistance: 10000,
-        preferredCargoTypes: [],
-        riskTolerance: 'medium' as const,
+        preferredCargoTypes: ['Container'],
+        riskTolerance: 'medium',
       },
     };
 
@@ -1167,6 +1166,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     set(prevState => ({
       fleet: prevState.fleet.map(ship => {
+        // Ship aging and condition degradation
+        // Age ships (1 day = 1 day in game time)
+        ship.ageYear += 1 / 365;
+        
+        // Condition degradation (2% per month = ~0.067% per day)
+        ship.condition = Math.max(0, (ship.condition || 100) - 0.067);
+        
+        // Increase maintenance costs with age
+        const ageFactor = 1 + (ship.ageYear * 0.05); // 5% increase per year
+        ship.maintenanceCost = (state.shipSpecs.find(s => s.id === ship.specId)?.buildCost || 0) * 0.005 / 365 * ageFactor;
+        
         const daysSinceLastMaintenance = state.simulationDay - ship.lastMaintenance;
         const conditionDecay = Math.floor(daysSinceLastMaintenance / 30) * 2; // 2% per month
         const newCondition = Math.max(0, ship.condition - conditionDecay);
