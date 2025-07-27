@@ -9,6 +9,7 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 import { Ship, Package, MapPin, Clock, DollarSign, Plus, Settings, Repeat } from 'lucide-react';
+import { Wrench, AlertTriangle } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { ShipInstance, CargoContract } from '../types/game';
 import { ShipPurchaseModal } from './ShipPurchaseModal';
