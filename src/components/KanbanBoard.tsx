@@ -115,7 +115,7 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
           {ship.status === 'sailing' && ship.etaDay > 0 && (
             <div className="flex items-center gap-1">
               <Clock size={14} />
-              <span>ETA: {ship.etaDay}日後</span>
+              <span>残り: {ship.etaDay}日</span>
             </div>
           )}
         </div>
