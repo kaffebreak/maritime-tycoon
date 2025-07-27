@@ -49,10 +49,6 @@ interface GameStore extends GameState {
   
   // Utilities
   formatCurrency: (amount: number) => string;
-  takeLoan: (amount: number, termDays: number) => void;
-  payLoanInstallments: () => void;
-  performMaintenance: (shipId: string, type: 'minor' | 'major' | 'drydock') => void;
-  checkMaintenanceNeeds: () => void;
   calculateVoyageCosts: (shipId: string, contractId: string) => {
     fuel: number;
     port: number;
@@ -305,6 +301,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().simulateNPCActions();
     get().updateRankings();
     get().checkAchievements();
+    get().payLoanInstallments();
+    get().checkMaintenanceNeeds();
     get().payLoanInstallments();
     get().checkMaintenanceNeeds();
     get().processAutoContracts();
