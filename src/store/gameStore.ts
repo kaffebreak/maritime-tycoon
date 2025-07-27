@@ -512,8 +512,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
                     get().assignContract(suitableContract.id, ship.id);
                   }, 100); // Small delay to avoid state conflicts
                 }
-              }
-            }
+          if (ship.status === 'sailing' && ship.etaDay > 0) {
+            // Decrease remaining days
+            ship.etaDay = Math.max(0, ship.etaDay - 1);
           }
         });
         
