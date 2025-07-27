@@ -249,12 +249,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ageYear: 0,
       maintenanceCost: 0,
       insuranceCost: 0,
+      // Auto contract settings with proper defaults
       autoContract: false,
       autoSettings: {
         minProfitMargin: 15,
         maxDistance: 10000,
-        preferredCargoTypes: ['Container'],
-        riskTolerance: 'medium',
+        preferredCargoTypes: [],
+        riskTolerance: 'medium' as const,
       },
     };
 
