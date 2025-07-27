@@ -422,112 +422,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       if (availableContracts.length > 0) {
         const bestContract = availableContracts.reduce((best, current) => {
           // Calculate daily progress more accurately
-          const dailyProgress = 1 / voyage.estimatedDays;
-          const newProgress = Math.min(1, voyage.currentProgress + dailyProgress);
           const bestCosts = get().calculateVoyageCosts(ship.id, best.id);
           const currentCosts = get().calculateVoyageCosts(ship.id, current.id);
           const bestMargin = ((best.amount * best.freightRate - bestCosts.total) / (best.amount * best.freightRate)) * 100;
           const currentMargin = ((current.amount * current.freightRate - currentCosts.total) / (current.amount * current.freightRate)) * 100;
           return currentMargin > bestMargin ? current : best;
         });
-        
-        // Check for completed voyages
-        const completedVoyages = state.activeVoyages.filter(voyage => voyage.currentProgress >= 1);
-        
-        // Process completed voyages
-        completedVoyages.forEach(voyage => {
-          const ship = state.fleet.find(s => s.id === voyage.shipId);
-          const contract = state.contracts.find(c => c.id === voyage.contractId);
-          
-          if (ship && contract) {
-            // Update ship status and location
-            ship.status = 'idle';
-            ship.currentPort = contract.destination;
-            ship.destPort = undefined;
-            ship.contractId = undefined;
-            ship.etaDay = 0;
-            
-            // Add distance to ship's total
-            ship.totalDistance += contract.distanceNm;
-            
-            // Complete the contract
-            contract.status = 'completed';
-            
-            // Add revenue and update stats
-            state.cash += voyage.revenue;
-            state.totalRevenue += voyage.revenue;
-            state.totalCosts += voyage.costs.fuel + voyage.costs.port + voyage.costs.cargo + voyage.costs.maintenance + voyage.costs.insurance;
-            state.completedContracts += 1;
-            
-            // Update reputation based on performance
-            const reputationGain = voyage.events.length === 0 ? 2 : 1; // Bonus for event-free voyage
-            state.reputation = Math.min(100, state.reputation + reputationGain);
-            
-            // Move to completed voyages
-            state.completedVoyages.push({
-              ...voyage,
-              currentProgress: 1,
-            });
-            
-            // Generate market news
-            state.marketNews.push({
-              id: `news-${Date.now()}-${Math.random()}`,
-              type: 'contract_win',
-              companyId: 'player',
-              message: `${ship.name}が${contract.origin}から${contract.destination}への${contract.cargoType}輸送を完了しました`,
-              day: state.simulationDay,
-              impact: 'positive',
-            });
-            
-            // Handle long-term contracts
-            if (contract.contractType === 'long_term' && contract.repeatCount && contract.repeatCount > 1) {
-              // Create next iteration of long-term contract
-              const nextContract: CargoContract = {
-                ...contract,
-                id: `contract-${Date.now()}-${Math.random()}`,
-                status: 'available',
-                repeatCount: contract.repeatCount - 1,
-                createdDay: state.simulationDay,
-                expiresDay: state.simulationDay + (contract.duration || 30),
-              };
-              state.contracts.push(nextContract);
-            }
-            
-            // Check for auto-contract if enabled
-            if (ship.autoContract) {
-              // Try to find and assign a suitable contract automatically
-              const suitableContract = state.contracts.find(c => 
-                c.status === 'available' &&
-                ship.autoSettings.preferredCargoTypes.includes(c.cargoType) &&
-                c.distanceNm <= ship.autoSettings.maxDistance
-              );
-              
-              if (suitableContract) {
-                const costs = get().calculateVoyageCosts(ship.id, suitableContract.id);
-                const revenue = suitableContract.amount * suitableContract.freightRate;
-                const profitMargin = costs ? ((revenue - costs.total) / revenue) * 100 : 0;
-                
-                if (profitMargin >= ship.autoSettings.minProfitMargin) {
-                  // Auto-assign the contract
-                  setTimeout(() => {
-                    get().assignContract(suitableContract.id, ship.id);
-                  }, 100); // Small delay to avoid state conflicts
-                }
-              }
-            }
-          }
-        });
-        
-        // Update ship ETAs
-        state.fleet.forEach(ship => {
-          if (ship.status === 'sailing' && ship.etaDay > 0) {
-            // Decrease remaining days
-            ship.etaDay = Math.max(0, ship.etaDay - 1);
-          }
-        });
-        
-        // Remove completed voyages from active list
-        state.activeVoyages = state.activeVoyages.filter(voyage => voyage.currentProgress < 1);
 
         // Double-check contract is still available before assigning
         const currentState = get();
@@ -608,13 +508,103 @@ export const useGameStore = create<GameStore>((set, get) => ({
     set(prevState => {
       const updatedVoyages = prevState.activeVoyages.map(voyage => {
         const elapsed = state.simulationDay - voyage.startDay;
-        const progress = Math.min(elapsed / voyage.estimatedDays, 1);
+        const dailyProgress = 1 / voyage.estimatedDays;
+        const newProgress = Math.min(1, voyage.currentProgress + dailyProgress);
         
-        return { ...voyage, currentProgress: progress };
+        return { ...voyage, currentProgress: newProgress };
       });
+        
+      // Check for completed voyages
+      const completedVoyages = updatedVoyages.filter(voyage => voyage.currentProgress >= 1);
+      
+      // Process completed voyages
+      completedVoyages.forEach(voyage => {
+        const ship = state.fleet.find(s => s.id === voyage.shipId);
+        const contract = state.contracts.find(c => c.id === voyage.contractId);
+        
+        if (ship && contract) {
+          // Update ship status and location
+          ship.status = 'idle';
+          ship.currentPort = contract.destination;
+          ship.destPort = undefined;
+          ship.contractId = undefined;
+          ship.etaDay = 0;
+          
+          // Add distance to ship's total
+          ship.totalDistance += contract.distanceNm;
+          
+          // Complete the contract
+          contract.status = 'completed';
+          
+          // Add revenue and update stats
+          state.cash += voyage.revenue;
+          state.totalRevenue += voyage.revenue;
+          state.totalCosts += voyage.costs.fuel + voyage.costs.port + voyage.costs.cargo + voyage.costs.maintenance + voyage.costs.insurance;
+          state.completedContracts += 1;
+          
+          // Update reputation based on performance
+          const reputationGain = voyage.events.length === 0 ? 2 : 1; // Bonus for event-free voyage
+          state.reputation = Math.min(100, state.reputation + reputationGain);
+          
+          // Move to completed voyages
+          state.completedVoyages.push({
+            ...voyage,
+            currentProgress: 1,
+          });
+          
+          // Generate market news
+          state.marketNews.push({
+            id: `news-${Date.now()}-${Math.random()}`,
+            type: 'contract_win',
+            companyId: 'player',
+            message: `${ship.name}が${contract.origin}から${contract.destination}への${contract.cargoType}輸送を完了しました`,
+            day: state.simulationDay,
+            impact: 'positive',
+          });
+          
+          // Handle long-term contracts
+          if (contract.contractType === 'long_term' && contract.repeatCount && contract.repeatCount > 1) {
+            // Create next iteration of long-term contract
+            const nextContract: CargoContract = {
+              ...contract,
+              id: `contract-${Date.now()}-${Math.random()}`,
+              status: 'available',
+              repeatCount: contract.repeatCount - 1,
+              createdDay: state.simulationDay,
+              expiresDay: state.simulationDay + (contract.duration || 30),
+            };
+            state.contracts.push(nextContract);
+          }
+          
+          // Check for auto-contract if enabled
+          if (ship.autoContract) {
+            // Try to find and assign a suitable contract automatically
+            const suitableContract = state.contracts.find(c => 
+              c.status === 'available' &&
+              ship.autoSettings.preferredCargoTypes.includes(c.cargoType) &&
+              c.distanceNm <= ship.autoSettings.maxDistance
+            );
+            
+            if (suitableContract) {
+              const costs = get().calculateVoyageCosts(ship.id, suitableContract.id);
+              const revenue = suitableContract.amount * suitableContract.freightRate;
+              const profitMargin = costs ? ((revenue - costs.total) / revenue) * 100 : 0;
+              
+              if (profitMargin >= ship.autoSettings.minProfitMargin) {
+                // Auto-assign the contract
+                setTimeout(() => {
+                  get().assignContract(suitableContract.id, ship.id);
+                }, 100); // Small delay to avoid state conflicts
+              }
+            }
+          }
+        }
+      });
+      
+      // Remove completed voyages from active list
+      state.activeVoyages = state.activeVoyages.filter(voyage => voyage.currentProgress < 1);
 
       // Complete finished voyages
-      const completedVoyages = updatedVoyages.filter(v => v.currentProgress >= 1);
       const activeVoyages = updatedVoyages.filter(v => v.currentProgress < 1);
 
       // Calculate revenue for completed voyages
