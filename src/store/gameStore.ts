@@ -49,6 +49,10 @@ interface GameStore extends GameState {
   
   // Utilities
   formatCurrency: (amount: number) => string;
+  takeLoan: (amount: number, termDays: number) => void;
+  payLoanInstallments: () => void;
+  performMaintenance: (shipId: string, type: 'minor' | 'major' | 'drydock') => void;
+  checkMaintenanceNeeds: () => void;
   calculateVoyageCosts: (shipId: string, contractId: string) => {
     fuel: number;
     port: number;
