@@ -256,6 +256,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
         preferredCargoTypes: ['Container'],
         riskTolerance: 'medium',
       },
+      condition: 100,
+      lastMaintenance: get().simulationDay,
+      totalDistance: 0,
+      maintenanceStatus: 'none' as const,
+      maintenanceHistory: [],
+      crew: {
+        captain: {
+          id: `crew-${Date.now()}-captain`,
+          name: 'Captain Smith',
+          role: 'captain',
+          experience: 5,
+          salary: 8000,
+          morale: 80,
+          skills: {
+            navigation: 75,
+            leadership: 70,
+            emergency: 65,
+          },
+        },
+        officers: [],
+        crew: [],
+      },
     };
 
     const initialContracts = Array.from({ length: 12 }, () => {
