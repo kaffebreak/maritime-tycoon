@@ -55,6 +55,7 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
     const ship = item as ShipInstance;
     const spec = shipSpecs.find(s => s.id === ship.specId);
     const currentPort = ports.find(p => p.LOCODE === ship.currentPort);
+    const activeShipVoyage = activeVoyages.find(v => v.shipId === ship.id);
     
     const getShipTypeIcon = (shipClass: string) => {
       switch (shipClass) {
@@ -78,13 +79,13 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {ship.autoContract && (
+            {ship.autoContract && activeShipVoyage && activeShipVoyage.events.length > 0 && (
               <div className="text-yellow-800">
                 <div className="font-medium mb-1">最新イベント:</div>
-                <div>{voyage.events[voyage.events.length - 1].message}</div>
-                {voyage.events[voyage.events.length - 1].riskZone && (
+                <div>{activeShipVoyage.events[activeShipVoyage.events.length - 1].message}</div>
+                {activeShipVoyage.events[activeShipVoyage.events.length - 1].riskZone && (
                   <div className="text-xs text-red-600 mt-1">
-                    危険海域: {voyage.events[voyage.events.length - 1].riskZone}
+                    危険海域: {activeShipVoyage.events[activeShipVoyage.events.length - 1].riskZone}
                   </div>
                 )}
               </div>
