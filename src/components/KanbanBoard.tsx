@@ -118,10 +118,32 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
               <span>残り: {ship.etaDay}日</span>
             </div>
           )}
+          {ship.status === 'maintenance' && ship.etaDay > 0 && (
+            <div className="flex items-center gap-1">
+              <Wrench size={14} />
+              <span>完了まで: {ship.etaDay - simulationDay}日</span>
+            </div>
+          )}
+          {ship.scheduledMaintenance && (
+            <div className="flex items-center gap-1 text-orange-600">
+              <AlertTriangle size={14} />
+              <span>{ship.scheduledMaintenance.type} 予定</span>
+            </div>
+          )}
         </div>
 
+        {/* Maintenance Warning */}
+        {ship.condition < 50 && ship.status === 'idle' && (
+          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2 text-red-700 text-sm">
+              <AlertTriangle size={14} />
+              <span>状態悪化 - メンテナンス推奨</span>
+            </div>
+          </div>
+        )}
+
         {ship.status === 'idle' && (
-          <div className="mt-3 pt-3 border-t border-slate-200">
+          <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
             <button
               onClick={() => setShowAutoModal(true)}
               className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -133,6 +155,18 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
               <Settings size={14} className="inline mr-1" />
               {ship.autoContract ? '自動契約: ON' : '自動契約設定'}
             </button>
+            
+            <button
+              onClick={() => setShowMaintenanceModal(true)}
+              className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                ship.scheduledMaintenance || ship.condition < 70
+                  ? 'bg-orange-600 text-white hover:bg-orange-700'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              }`}
+            >
+              <Wrench size={14} className="inline mr-1" />
+              メンテナンス
+            </button>
           </div>
         )}
 
@@ -140,6 +174,13 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
           <AutoContractModal
             ship={ship}
             onClose={() => setShowAutoModal(false)}
+          />
+        )}
+        
+        {showMaintenanceModal && (
+          <MaintenanceModal
+            ship={ship}
+            onClose={() => setShowMaintenanceModal(false)}
           />
         )}
       </div>
