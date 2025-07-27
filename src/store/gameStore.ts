@@ -438,7 +438,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 estimatedCost: shipSpecs.find(s => s.id === ship.specId)?.buildCost * MAINTENANCE_COSTS.emergency || 0,
               };
             }
-          }
           
           // Complete maintenance if due
           if (ship.status === 'maintenance' && ship.etaDay > 0 && simulationDay >= ship.etaDay) {
@@ -459,6 +458,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
               // Auto-schedule minor maintenance
               get().scheduleMaintenance(ship.id, 'minor');
             }
+          }
           return currentMargin > bestMargin ? current : best;
         });
 
@@ -626,10 +626,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
               if (profitMargin >= ship.autoSettings.minProfitMargin) {
                 // Auto-assign the contract
                 setTimeout(() => {
-              if (ship.status === 'maintenance' && ship.etaDay <= 0) {
+                  get().assignContract(suitableContract.id, ship.id);
                 }, 100); // Small delay to avoid state conflicts
               }
-            });
+            }
           }
         }
       });
