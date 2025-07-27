@@ -316,6 +316,22 @@ export const RISK_ZONES = {
   },
 };
 
+// Difficulty modifiers for random events (6-4)
+export const DIFFICULTY_EVENT_MODIFIERS = {
+  Easy: { 
+    probabilityMultiplier: 0.5,  // ×0.5 probability
+    effectMultiplier: 0.5        // -50% effect
+  },
+  Normal: { 
+    probabilityMultiplier: 1.0,  // ×1.0 probability  
+    effectMultiplier: 1.0        // 100% effect
+  },
+  Hard: { 
+    probabilityMultiplier: 2.0,  // ×2.0 probability
+    effectMultiplier: 1.5        // +50% effect
+  },
+};
+
 // Detailed random events based on specification
 export const RANDOM_EVENTS = {
   E1: {
