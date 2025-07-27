@@ -38,6 +38,18 @@ export const MAINTENANCE_INTERVALS = {
   drydock: 1825,   // days (5 years)
 };
 
+export const CREW_COSTS = {
+  captain: 300,    // USD per day
+  engineer: 200,   // USD per day
+  sailor: 150,     // USD per day
+};
+
+export const MAINTENANCE_INTERVALS = {
+  minor: 90,       // days
+  major: 365,      // days
+  drydock: 1825,   // days (5 years)
+};
+
 export const SAMPLE_PORTS: Port[] = [
   {
     LOCODE: 'JPTYO',
