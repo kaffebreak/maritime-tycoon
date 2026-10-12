@@ -26,8 +26,10 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { getRouteOptions, pirateZoneAt, pointAlongRoute, RouteOption } from '../constants/seaRoutes';
 import { advanceStorms, stormAt, STORM_KINDS } from '../constants/weather';
+import { BANKRUPTCY_GRACE_DAYS, SCENARIOS, scenarioTarget } from '../constants/scenarios';
 import {
   createFreightMarket,
+  setMarketLevel,
   FreightMarket,
   MARKET_SEGMENTS,
   MarketSegment,
@@ -55,7 +57,9 @@ export interface VoyageEstimate extends VoyageCosts {
 
 interface GameStore extends GameState {
   // Actions
-  initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard') => void;
+  initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard', scenarioId?: string) => void;
+  getCompanyValue: () => number;
+  checkGameEnd: () => void;
   setGameSpeed: (speed: GameState['gameSpeed']) => void;
   advanceSimulation: () => void;
   updateContractExpiration: () => void;
@@ -309,8 +313,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
   secondhandOffers: [],
   charterOffers: [],
   newbuildOrders: [],
+  scenarioId: 'free',
+  startValue: 0,
+  valueHistory: [],
 
-  initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard') => {
+  initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard', scenarioId = 'free') => {
+    const scenario = SCENARIOS.find(s => s.id === scenarioId) ?? SCENARIOS[SCENARIOS.length - 1];
     const difficultySettings = {
       Easy: 25_000_000,
       Normal: 15_000_000,
@@ -322,7 +330,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     // A secondhand Handysize bulker, eight years old.
     const starterShip = makeShip(SAMPLE_SHIP_SPECS.find(s => s.id === 'BULK-HANDY')!, 'Ocean Pioneer', 'SGSIN', -8 * 365, 0);
 
-    const freightMarket = createFreightMarket(0);
+    const randomMarket = createFreightMarket(0);
+    const freightMarket = scenario.market
+      ? setMarketLevel(randomMarket, 0, scenario.market.level, scenario.market.orderbook)
+      : randomMarket;
     const initialContracts = Array.from({ length: 12 }, () => {
       const contract = generateRandomContract(SAMPLE_PORTS, freightMarket);
       return { ...contract, createdDay: 0 };
@@ -338,6 +349,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
       charterOffers: generateCharterOffers(SAMPLE_SHIP_SPECS, SAMPLE_PORTS, freightMarket, 0, uuidv4),
       newbuildOrders: [],
       contracts: initialContracts,
+      activeVoyages: [],
+      completedVoyages: [],
+      totalRevenue: 0,
+      totalCosts: 0,
+      completedContracts: 0,
+      finances: { ...get().finances, loans: [] },
+      scenarioId: scenario.id,
+      valueHistory: [],
+      cashNegativeSince: undefined,
+      gameOver: undefined,
       npcCompanies: [],
       rankings: [],
       marketNews: [],
@@ -349,17 +370,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
       ),
     });
     
+    const startValue = get().getCompanyValue();
+    set({ startValue, valueHistory: [{ day: 0, value: startValue }] });
+
     // Initialize NPC companies after setting initial state
     get().initializeNPCCompanies();
   },
 
   setGameSpeed: (speed) => {
+    if (get().gameOver) return;
     set({ gameSpeed: speed });
   },
 
   advanceSimulation: () => {
     const state = get();
-    if (state.gameSpeed === 0) return;
+    if (state.gameSpeed === 0 || state.gameOver) return;
 
     set(prevState => ({
       simulationDay: prevState.simulationDay + 1,
@@ -386,6 +411,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().checkMaintenanceNeeds();
     get().processAutoContracts();
     get().triggerDetailedRandomEvents();
+    get().checkGameEnd();
+  },
+
+  // Cash plus what the fleet and yard orders are worth, less what is owed.
+  getCompanyValue: () => {
+    const state = get();
+    const ships = state.fleet.reduce((sum, ship) => {
+      if (ship.charter?.kind === 'in') return sum;
+      const spec = state.shipSpecs.find(s => s.id === ship.specId);
+      return sum + (spec ? shipValue(state.freightMarket, spec, ship.builtDay, state.simulationDay) : 0);
+    }, 0);
+    const yardPayments = state.newbuildOrders.reduce((sum, o) => sum + o.paid, 0);
+    const debt = state.finances.loans.reduce((sum, l) => sum + l.remainingAmount, 0);
+    return Math.round(state.cash + ships + yardPayments - debt);
+  },
+
+  checkGameEnd: () => {
+    const state = get();
+    if (state.gameOver) return;
+    const day = state.simulationDay;
+    const value = get().getCompanyValue();
+    const scenario = SCENARIOS.find(s => s.id === state.scenarioId);
+
+    const cashNegativeSince = state.cash < 0 ? (state.cashNegativeSince ?? day) : undefined;
+    let result: NonNullable<GameState['gameOver']>['result'] | null = null;
+    if (cashNegativeSince !== undefined && day - cashNegativeSince >= BANKRUPTCY_GRACE_DAYS) result = 'bankrupt';
+    else if (scenario?.goalValue && value >= scenario.goalValue) result = 'won';
+    else if (scenario?.years && day >= scenario.years * 365) {
+      const target = scenarioTarget(scenario, state.startValue);
+      result = target === undefined ? 'finished' : value >= target ? 'won' : 'lost';
+    }
+
+    set(prev => ({
+      cashNegativeSince,
+      valueHistory: day % 30 === 0 ? [...prev.valueHistory, { day, value }] : prev.valueHistory,
+      ...(result ? { gameOver: { result, day, value }, gameSpeed: 0 as const } : {}),
+    }));
   },
 
   // Order a ship from the yard: a deposit now, the rest on delivery.
