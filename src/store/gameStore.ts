@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GameState, CargoContract, ShipInstance, Voyage, VoyageEvent, Port, ShipSpec } from '../types/game';
+import { GameState, CargoContract, ShipInstance, Voyage, VoyageCosts, VoyageEvent, Port, ShipSpec } from '../types/game';
 import { 
   INITIAL_CASH, 
   SAMPLE_PORTS, 
@@ -16,11 +16,19 @@ import {
   FUEL_PRICE_FACTORS,
   ECONOMIC_CYCLES,
   DIFFICULTY_EVENT_MODIFIERS,
-  RANDOM_EVENTS
+  RANDOM_EVENTS,
+  dailyOperatingCost,
 } from '../constants/gameData';
 import { v4 as uuidv4 } from 'uuid';
 import { getRouteOptions, pirateZoneAt, pointAlongRoute, RouteOption } from '../constants/seaRoutes';
 import { advanceStorms, stormAt, STORM_KINDS } from '../constants/weather';
+
+// Voyage costs plus how long the whole trip takes, empty leg included.
+export interface VoyageEstimate extends VoyageCosts {
+  days: number;
+  ballastNm: number;
+  ballastDays: number;
+}
 
 interface GameStore extends GameState {
   // Actions
@@ -55,14 +63,9 @@ interface GameStore extends GameState {
   // Utilities
   formatCurrency: (amount: number) => string;
   getRouteOptionsFor: (shipId: string, contractId: string) => RouteOption[];
-  calculateVoyageCosts: (shipId: string, contractId: string, route?: RouteOption) => {
-    fuel: number;
-    port: number;
-    cargo: number;
-    maintenance: number;
-    insurance: number;
-    total: number;
-  };
+  getBallastRoute: (shipId: string, contractId: string) => RouteOption | null;
+  calculateVoyageCosts: (shipId: string, contractId: string, route?: RouteOption) => VoyageEstimate;
+  chargeOperatingCosts: () => void;
 }
 
 const generateRandomContract = (ports: Port[]): CargoContract => {
@@ -298,6 +301,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
       simulationDay: prevState.simulationDay + 1,
     }));
 
+    get().chargeOperatingCosts();
+
     // Update voyages and trigger events
     get().updateVoyages();
     get().updateContractExpiration();
@@ -510,21 +515,27 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!ship || !contract || !shipSpec) return;
 
     const route = chosenRoute ?? get().getRouteOptionsFor(shipId, contractId)[0];
-    const distanceNm = route?.distanceNm ?? contract.distanceNm;
-    const estimatedDays = Math.ceil(distanceNm / shipSpec.speedKt / 24);
-    const costs = get().calculateVoyageCosts(shipId, contractId, route);
+    const ballast = get().getBallastRoute(shipId, contractId);
+    const estimate = get().calculateVoyageCosts(shipId, contractId, route);
+    // Running costs are charged day by day, so only the trip's own costs go now.
+    const paidNow = estimate.fuel + estimate.port + estimate.cargo;
+
+    // The ship first sails empty to the loading port, then carries the cargo.
+    const points = route?.points && ballast ? [...ballast.points, ...route.points.slice(1)] : route?.points;
+    const routeNm = route ? route.distanceNm + estimate.ballastNm : undefined;
 
     const voyage: Voyage = {
       id: uuidv4(),
       shipId,
       contractId,
       startDay: state.simulationDay,
-      estimatedDays,
+      estimatedDays: estimate.days,
       currentProgress: 0,
-      route: route?.points,
+      route: points,
       routeLabel: route?.label,
-      routeNm: route?.distanceNm,
-      costs,
+      routeNm,
+      ballastNm: estimate.ballastNm,
+      costs: estimate,
       revenue: contract.amount * contract.freightRate,
       events: [],
     };
@@ -537,162 +548,128 @@ export const useGameStore = create<GameStore>((set, get) => ({
               ...s, 
               status: 'sailing' as const, 
               destPort: contract.destination,
-              etaDay: state.simulationDay + estimatedDays 
+              etaDay: state.simulationDay + estimate.days 
             }
           : s
       ),
-      cash: prevState.cash - costs.total,
-      totalCosts: prevState.totalCosts + costs.total,
+      cash: prevState.cash - paidNow,
+      totalCosts: prevState.totalCosts + paidNow,
     }));
   },
 
   updateVoyages: () => {
     const state = get();
-    
-    set(prevState => {
-      const updatedVoyages = prevState.activeVoyages.map(voyage => {
-        // Storms slow a ship down for the day it spends inside them.
-        const storm = voyage.route && stormAt(prevState.storms, pointAlongRoute(voyage.route, voyage.currentProgress));
-        const speedFactor = storm ? STORM_KINDS[storm.kind].speedFactor : 1;
-        const dailyProgress = speedFactor / voyage.estimatedDays;
-        const newProgress = Math.min(1, voyage.currentProgress + dailyProgress);
-        
-        return {
-          ...voyage,
-          currentProgress: newProgress,
-          estimatedDays: voyage.estimatedDays + (1 - speedFactor),
-        };
-      });
-        
-      // Check for completed voyages
-      const completedVoyages = updatedVoyages.filter(voyage => voyage.currentProgress >= 1);
-      
-      // Process completed voyages
-      completedVoyages.forEach(voyage => {
-        const ship = state.fleet.find(s => s.id === voyage.shipId);
-        const contract = state.contracts.find(c => c.id === voyage.contractId);
-        
-        if (ship && contract) {
-          // Update ship status and location
-          ship.status = 'idle';
-          ship.currentPort = contract.destination;
-          ship.destPort = undefined;
-          ship.contractId = undefined;
-          ship.etaDay = 0;
-          
-          // Add distance to ship's total
-          ship.totalDistance += contract.distanceNm;
-          
-          // Complete the contract
-          contract.status = 'completed';
-          
-          // Add revenue and update stats
-          state.cash += voyage.revenue;
-          state.totalRevenue += voyage.revenue;
-          state.totalCosts += voyage.costs.fuel + voyage.costs.port + voyage.costs.cargo + voyage.costs.maintenance + voyage.costs.insurance;
-          state.completedContracts += 1;
-          
-          // Update reputation based on performance
-          const reputationGain = voyage.events.length === 0 ? 2 : 1; // Bonus for event-free voyage
-          state.reputation = Math.min(100, state.reputation + reputationGain);
-          
-          // Move to completed voyages
-          state.completedVoyages.push({
-            ...voyage,
-            currentProgress: 1,
-          });
-          
-          // Generate market news
-          state.marketNews.push({
-            id: `news-${Date.now()}-${Math.random()}`,
-            type: 'contract_win',
-            companyId: 'player',
-            message: `${ship.name}が${contract.origin}から${contract.destination}への${contract.cargoType}輸送を完了しました`,
-            day: state.simulationDay,
-            impact: 'positive',
-          });
-          
-          // Handle long-term contracts
-          if (contract.contractType === 'long_term' && contract.repeatCount && contract.repeatCount > 1) {
-            // Create next iteration of long-term contract
-            const nextContract: CargoContract = {
-              ...contract,
-              id: `contract-${Date.now()}-${Math.random()}`,
-              status: 'available',
-              repeatCount: contract.repeatCount - 1,
-              createdDay: state.simulationDay,
-              expiresDay: state.simulationDay + (contract.duration || 30),
-            };
-            state.contracts.push(nextContract);
-          }
-          
-          // Check for auto-contract if enabled
-          if (ship.autoContract) {
-            // Try to find and assign a suitable contract automatically
-            const suitableContract = state.contracts.find(c => 
-              c.status === 'available' &&
-              ship.autoSettings.preferredCargoTypes.includes(c.cargoType) &&
-              c.distanceNm <= ship.autoSettings.maxDistance
-            );
-            
-            if (suitableContract) {
-              const costs = get().calculateVoyageCosts(ship.id, suitableContract.id);
-              const revenue = suitableContract.amount * suitableContract.freightRate;
-              const profitMargin = costs ? ((revenue - costs.total) / revenue) * 100 : 0;
-              
-              if (profitMargin >= ship.autoSettings.minProfitMargin) {
-                // Auto-assign the contract
-                setTimeout(() => {
-                  get().assignContract(suitableContract.id, ship.id);
-                }, 100); // Small delay to avoid state conflicts
-              }
-            }
-          }
-        }
-      });
-      
-      // Remove completed voyages from active list
-      state.activeVoyages = state.activeVoyages.filter(voyage => voyage.currentProgress < 1);
 
-      // Complete finished voyages
-      const activeVoyages = updatedVoyages.filter(v => v.currentProgress < 1);
-
-      // Calculate revenue for completed voyages
-      let additionalRevenue = 0;
-      let completedCount = 0;
-
-      const updatedFleet = prevState.fleet.map(ship => {
-        const completedVoyage = completedVoyages.find(v => v.shipId === ship.id);
-        if (completedVoyage) {
-          additionalRevenue += completedVoyage.revenue;
-          completedCount++;
-          
-          const contract = prevState.contracts.find(c => c.id === completedVoyage.contractId);
-          return {
-            ...ship,
-            status: 'idle' as const,
-            currentPort: contract?.destination || ship.currentPort,
-            destPort: undefined,
-            contractId: undefined,
-            etaDay: 0,
-          };
-        }
-        return ship;
-      });
-
+    const progressed = state.activeVoyages.map(voyage => {
+      // Storms slow a ship down for the day it spends inside them.
+      const storm = voyage.route && stormAt(state.storms, pointAlongRoute(voyage.route, voyage.currentProgress));
+      const speedFactor = storm ? STORM_KINDS[storm.kind].speedFactor : 1;
       return {
-        activeVoyages,
-        completedVoyages: [...prevState.completedVoyages, ...completedVoyages],
-        fleet: updatedFleet,
-        cash: prevState.cash + additionalRevenue,
-        totalRevenue: prevState.totalRevenue + additionalRevenue,
-        completedContracts: prevState.completedContracts + completedCount,
-        contracts: prevState.contracts.map(c => {
-          const isCompleted = completedVoyages.some(v => v.contractId === c.id);
-          return isCompleted ? { ...c, status: 'completed' as const } : c;
-        }),
+        ...voyage,
+        currentProgress: Math.min(1, voyage.currentProgress + speedFactor / voyage.estimatedDays),
+        estimatedDays: voyage.estimatedDays + (1 - speedFactor),
       };
     });
+
+    const arrived = progressed.filter(v => v.currentProgress >= 1);
+    if (arrived.length === 0) {
+      set({ activeVoyages: progressed });
+      return;
+    }
+
+    const arrivedByShip = new Map(arrived.map(v => [v.shipId, v]));
+    const arrivedContracts = new Set(arrived.map(v => v.contractId));
+    const contractById = new Map(state.contracts.map(c => [c.id, c]));
+
+    let revenue = 0;
+    let reputation = state.reputation;
+    const news: GameState['marketNews'] = [];
+    const repeats: CargoContract[] = [];
+
+    arrived.forEach(voyage => {
+      const ship = state.fleet.find(s => s.id === voyage.shipId);
+      const contract = contractById.get(voyage.contractId);
+      if (!ship || !contract) return;
+
+      revenue += voyage.revenue;
+      // Bonus for an event-free voyage
+      reputation = Math.min(100, reputation + (voyage.events.length === 0 ? 2 : 1));
+      news.push({
+        id: `news-${uuidv4()}`,
+        type: 'contract_win',
+        companyId: 'player',
+        message: `${ship.name}が${contract.origin}から${contract.destination}への${contract.cargoType}輸送を完了しました`,
+        day: state.simulationDay,
+        impact: 'positive',
+      });
+
+      // Long-term contracts come back for the next run
+      if (contract.contractType === 'long_term' && contract.repeatCount && contract.repeatCount > 1) {
+        repeats.push({
+          ...contract,
+          id: uuidv4(),
+          status: 'available',
+          repeatCount: contract.repeatCount - 1,
+          createdDay: state.simulationDay,
+          expiresDay: contract.duration || 30,
+        });
+      }
+    });
+
+    set({
+      activeVoyages: progressed.filter(v => v.currentProgress < 1),
+      completedVoyages: [...state.completedVoyages, ...arrived],
+      fleet: state.fleet.map(ship => {
+        const voyage = arrivedByShip.get(ship.id);
+        if (!voyage) return ship;
+        const contract = contractById.get(voyage.contractId);
+        return {
+          ...ship,
+          status: 'idle' as const,
+          currentPort: contract?.destination ?? ship.currentPort,
+          destPort: undefined,
+          contractId: undefined,
+          etaDay: 0,
+          totalDistance: (ship.totalDistance ?? 0) + (voyage.routeNm ?? contract?.distanceNm ?? 0),
+        };
+      }),
+      contracts: [
+        ...state.contracts.map(c => (arrivedContracts.has(c.id) ? { ...c, status: 'completed' as const } : c)),
+        ...repeats,
+      ],
+      cash: state.cash + revenue,
+      totalRevenue: state.totalRevenue + revenue,
+      completedContracts: state.completedContracts + arrived.length,
+      reputation,
+      marketNews: [...state.marketNews, ...news],
+    });
+
+    // Ships on auto-contract look for their next job where they arrived.
+    arrived.forEach(voyage => {
+      const ship = get().fleet.find(s => s.id === voyage.shipId);
+      if (!ship?.autoContract) return;
+      const next = get().contracts.find(c =>
+        c.status === 'available' &&
+        ship.autoSettings.preferredCargoTypes.includes(c.cargoType) &&
+        c.distanceNm <= ship.autoSettings.maxDistance
+      );
+      if (!next) return;
+      const costs = get().calculateVoyageCosts(ship.id, next.id);
+      const nextRevenue = next.amount * next.freightRate;
+      if (((nextRevenue - costs.total) / nextRevenue) * 100 >= ship.autoSettings.minProfitMargin) {
+        get().assignContract(next.id, ship.id);
+      }
+    });
+  },
+
+  chargeOperatingCosts: () => {
+    const state = get();
+    const total = state.fleet.reduce((sum, ship) => {
+      const spec = state.shipSpecs.find(s => s.id === ship.specId);
+      return sum + (spec ? dailyOperatingCost(spec) : 0);
+    }, 0);
+    if (total === 0) return;
+    set(prev => ({ cash: prev.cash - total, totalCosts: prev.totalCosts + total }));
   },
 
   updateContractExpiration: () => {
@@ -1350,7 +1327,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
                   estimatedDays: isDelay ? v.estimatedDays * RANDOM_EVENTS.E3.effects.voyageDelayMultiplier : v.estimatedDays,
                   costs: isDelay ? v.costs : {
                     ...v.costs,
-                    insurance: v.costs.insurance * RANDOM_EVENTS.E3.effects.insuranceMultiplier,
                     total: v.costs.total * RANDOM_EVENTS.E3.effects.insuranceMultiplier,
                   }
                 }
@@ -1433,6 +1409,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     return getRouteOptions(origin, dest, spec);
   },
 
+  // Shortest way for the ship to reach the loading port empty, or null if
+  // it is already there.
+  getBallastRoute: (shipId, contractId) => {
+    const state = get();
+    const ship = state.fleet.find(s => s.id === shipId);
+    const contract = state.contracts.find(c => c.id === contractId);
+    if (!ship || !contract || ship.currentPort === contract.origin) return null;
+    const spec = state.shipSpecs.find(s => s.id === ship.specId);
+    const from = state.ports.find(p => p.LOCODE === ship.currentPort);
+    const to = state.ports.find(p => p.LOCODE === contract.origin);
+    if (!from || !to) return null;
+    return getRouteOptions(from, to, spec)[0] ?? null;
+  },
+
   calculateVoyageCosts: (shipId, contractId, route) => {
     const state = get();
     const ship = state.fleet.find(s => s.id === shipId);
@@ -1442,23 +1432,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const destPort = state.ports.find(p => p.LOCODE === contract?.destination);
 
     if (!ship || !contract || !shipSpec || !originPort || !destPort) {
-      return { fuel: 0, port: 0, cargo: 0, maintenance: 0, insurance: 0, total: 0 };
+      return { fuel: 0, port: 0, cargo: 0, opex: 0, total: 0, days: 0, ballastNm: 0, ballastDays: 0 };
     }
 
     // Costs follow the sea route; the shortest one unless a route is chosen.
     const seaRoute = route ?? get().getRouteOptionsFor(shipId, contractId)[0];
-    const distanceNm = seaRoute?.distanceNm ?? contract.distanceNm;
-    const days = Math.ceil(distanceNm / shipSpec.speedKt / 24);
-    
-    const fuel = (distanceNm / 100) * shipSpec.fuelBurn100nm * state.fuelPrice;
-    const port = originPort.fees.port + destPort.fees.port + (seaRoute?.canalFee ?? 0);
-    const cargo = contract.amount * originPort.fees.cargo[contract.cargoType];
-    const maintenance = shipSpec.buildCost * COST_FACTORS.maintenanceRate / 365 * days;
-    const insurance = shipSpec.buildCost * COST_FACTORS.insuranceRate / 365 * days;
-    
-    const total = fuel + port + cargo + maintenance + insurance;
+    const ballast = get().getBallastRoute(shipId, contractId);
+    const ballastNm = ballast?.distanceNm ?? 0;
+    const ladenNm = seaRoute?.distanceNm ?? contract.distanceNm;
+    const distanceNm = ballastNm + ladenNm;
+    const toDays = (nm: number) => Math.ceil(nm / shipSpec.speedKt / 24);
+    const days = toDays(distanceNm);
 
-    return { fuel, port, cargo, maintenance, insurance, total };
+    const fuel = (distanceNm / 100) * shipSpec.fuelBurn100nm * state.fuelPrice;
+    const port = originPort.fees.port + destPort.fees.port + (seaRoute?.canalFee ?? 0) + (ballast?.canalFee ?? 0);
+    const cargo = contract.amount * originPort.fees.cargo[contract.cargoType];
+    const opex = dailyOperatingCost(shipSpec) * days;
+
+    const total = fuel + port + cargo + opex;
+
+    return { fuel, port, cargo, opex, total, days, ballastNm, ballastDays: ballastNm > 0 ? toDays(ballastNm) : 0 };
   },
 
   initializeNPCCompanies: () => {
