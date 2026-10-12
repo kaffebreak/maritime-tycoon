@@ -24,6 +24,7 @@ export const RouteChoiceModal: React.FC<RouteChoiceModalProps> = ({ shipId, cont
     shipSpecs,
     storms,
     getRouteOptionsFor,
+    getBallastRoute,
     calculateVoyageCosts,
     assignContract,
     formatCurrency,
@@ -35,6 +36,8 @@ export const RouteChoiceModal: React.FC<RouteChoiceModalProps> = ({ shipId, cont
   const origin = ports.find(p => p.LOCODE === contract?.origin);
   const dest = ports.find(p => p.LOCODE === contract?.destination);
   const routes = getRouteOptionsFor(shipId, contractId);
+  const ballast = getBallastRoute(shipId, contractId);
+  const here = ports.find(p => p.LOCODE === ship?.currentPort);
   const [selectedId, setSelectedId] = useState(routes[0]?.id);
   const [drawing, setDrawing] = useState(false);
   const [via, setVia] = useState<LonLat[]>([]);
@@ -56,7 +59,7 @@ export const RouteChoiceModal: React.FC<RouteChoiceModalProps> = ({ shipId, cont
     const costs = calculateVoyageCosts(shipId, contractId, route);
     return {
       route,
-      days: Math.ceil(route.distanceNm / spec.speedKt / 24),
+      days: costs.days,
       cost: costs.total,
       profit: revenue - costs.total,
       storms: stormsOnRoute(storms, route.points),
@@ -137,9 +140,26 @@ export const RouteChoiceModal: React.FC<RouteChoiceModalProps> = ({ shipId, cont
           )}
         </div>
 
+        {ballast && here && (
+          <div className="px-6 py-2 text-sm bg-amber-50 border-b border-amber-200 text-amber-800">
+            まず{here.name}から{origin.name}まで空船で回航します（{ballast.distanceNm.toLocaleString()}海里・約
+            {Math.ceil(ballast.distanceNm / spec.speedKt / 24)}日、運賃なし）。日数と費用には回航分も含まれています。
+          </div>
+        )}
+
         <BaseMap onMapClick={addWaypoint} className={drawing ? 'cursor-crosshair' : ''}>
           <RiskZoneLayer />
           <StormLayer storms={storms} />
+          {ballast && (
+            <path
+              d={linePath(ballast.points)}
+              fill="none"
+              stroke="#475569"
+              strokeWidth={2.5}
+              strokeDasharray="4 4"
+              pointerEvents="none"
+            />
+          )}
           {rows
             .filter(({ route }) => route.id !== CUSTOM_ID)
             .map(({ route }) => (
@@ -179,6 +199,7 @@ export const RouteChoiceModal: React.FC<RouteChoiceModalProps> = ({ shipId, cont
               </g>
             );
           })}
+          {here && here.LOCODE !== origin.LOCODE && <PortMarker port={here} />}
           <PortMarker port={origin} />
           <PortMarker port={dest} />
         </BaseMap>
@@ -205,7 +226,7 @@ export const RouteChoiceModal: React.FC<RouteChoiceModalProps> = ({ shipId, cont
                     {route.label}
                   </div>
                   <div className="text-xs text-slate-500">
-                    {route.distanceNm.toLocaleString()}海里・約{days}日
+                    {route.distanceNm.toLocaleString()}海里・約{days}日{ballast && '（回航込み）'}
                   </div>
                 </div>
                 <div className="text-sm text-slate-600">
