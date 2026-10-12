@@ -1,25 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { geoGraticule10, geoNaturalEarth1, geoPath } from 'd3-geo';
-import { feature } from 'topojson-client';
-import type { Topology, GeometryCollection } from 'topojson-specification';
-import landTopology from 'world-atlas/land-110m.json';
-import { Anchor, Map as MapIcon, Navigation, Wrench } from 'lucide-react';
+import { Anchor, CloudLightning, Map as MapIcon, Navigation, Wrench } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
-import { RISK_ZONES, SIMULATION_TICK_MS } from '../constants/gameData';
-import { getSeaRoute, LonLat, pointAlongRoute, remainingRoute } from '../constants/seaRoutes';
-import { CargoType, ShipInstance } from '../types/game';
-
-const WIDTH = 960;
-const HEIGHT = 500;
-const CENTER_LON = 10;
-
-const CARGO_STYLE: Record<CargoType, { color: string; label: string }> = {
-  Container: { color: '#2563eb', label: '📦 コンテナ' },
-  Car: { color: '#9333ea', label: '🚗 自動車' },
-  Bulk: { color: '#b45309', label: '⚫ バルク' },
-  Oil: { color: '#0f172a', label: '🛢️ 石油' },
-  Passenger: { color: '#db2777', label: '🚢 旅客' },
-};
+import { SIMULATION_TICK_MS } from '../constants/gameData';
+import { getRouteOptions, LonLat, pointAlongRoute, remainingRoute } from '../constants/seaRoutes';
+import { stormAt, STORM_KINDS } from '../constants/weather';
+import { CargoType, ShipInstance, Storm } from '../types/game';
+import { BaseMap, PortMarker, RiskZoneLayer, StormLayer } from './map/MapBase';
+import { CARGO_STYLE, linePath, mapSide, project } from './map/mapProjection';
 
 const STATUS_LABEL: Record<ShipInstance['status'], string> = {
   idle: '待機中',
@@ -28,32 +15,14 @@ const STATUS_LABEL: Record<ShipInstance['status'], string> = {
   maintenance: '整備中',
 };
 
-const projection = geoNaturalEarth1()
-  .rotate([-CENTER_LON, 0])
-  .fitSize([WIDTH, HEIGHT], { type: 'Sphere' });
-const path = geoPath(projection);
-
-const topology = landTopology as unknown as Topology<{ land: GeometryCollection }>;
-const landPath = path(feature(topology, topology.objects.land)) ?? '';
-const graticulePath = path(geoGraticule10()) ?? '';
-const spherePath = path({ type: 'Sphere' }) ?? '';
-
-// Crop the polar regions, where no ship ever sails.
-const TOP_Y = projection([CENTER_LON, 75])![1];
-const BOTTOM_Y = projection([CENTER_LON, -58])![1];
-
-const project = (point: LonLat) => projection(point) ?? [0, 0];
-
-// Which side of the map's seam a longitude falls on, so a ship crossing the
-// date line jumps instead of sliding across the whole map.
-const mapSide = (lon: number) => (((lon - CENTER_LON + 540) % 360) - 180 >= 0 ? 'e' : 'w');
-
 interface ShipOnMap {
   ship: ShipInstance;
   position: [number, number];
   heading: number;
   side: string;
   route?: LonLat[];
+  routeLabel?: string;
+  storm?: Storm;
   cargoType?: CargoType;
   originName?: string;
   destName?: string;
@@ -62,7 +31,7 @@ interface ShipOnMap {
 }
 
 export const WorldMap: React.FC = () => {
-  const { fleet, ports, activeVoyages, contracts, simulationDay, gameSpeed, shipSpecs } = useGameStore();
+  const { fleet, ports, activeVoyages, contracts, simulationDay, gameSpeed, shipSpecs, storms } = useGameStore();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const portByCode = useMemo(() => new Map(ports.map(p => [p.LOCODE, p])), [ports]);
@@ -84,7 +53,7 @@ export const WorldMap: React.FC = () => {
         continue;
       }
 
-      const route = getSeaRoute(origin, dest);
+      const route = voyage.route ?? getRouteOptions(origin, dest)[0].points;
       const here = pointAlongRoute(route, voyage.currentProgress);
       const ahead = pointAlongRoute(route, Math.min(1, voyage.currentProgress + 0.02));
       const [x, y] = project(here);
@@ -95,15 +64,17 @@ export const WorldMap: React.FC = () => {
         heading: (Math.atan2(ay - y, ax - x) * 180) / Math.PI,
         side: mapSide(here[0]),
         route,
+        routeLabel: voyage.routeLabel,
+        storm: stormAt(storms, here),
         cargoType: contract.cargoType,
         originName: origin.name,
         destName: dest.name,
         progress: voyage.currentProgress,
-        daysLeft: Math.max(0, voyage.startDay + voyage.estimatedDays - simulationDay),
+        daysLeft: Math.max(0, Math.ceil(voyage.startDay + voyage.estimatedDays - simulationDay)),
       });
     }
     return { sailing, docked };
-  }, [fleet, activeVoyages, contracts, portByCode, simulationDay]);
+  }, [fleet, activeVoyages, contracts, portByCode, simulationDay, storms]);
 
   const selectedShip = fleet.find(s => s.id === selectedId);
   const selectedSailing = shipsOnMap.sailing.find(s => s.ship.id === selectedId);
@@ -130,29 +101,13 @@ export const WorldMap: React.FC = () => {
               <span className="inline-block w-3 h-3 rounded-full bg-red-400/50 border border-red-500" />
               海賊多発海域
             </span>
+            <span className="flex items-center gap-1">🌀 台風・ハリケーン ⛈️ 嵐 🌫️ 濃霧（入ると減速）</span>
           </div>
         </div>
 
-        <svg
-          viewBox={`0 ${TOP_Y} ${WIDTH} ${BOTTOM_Y - TOP_Y}`}
-          className="w-full h-auto block bg-sky-100"
-          onClick={() => setSelectedId(null)}
-        >
-          <path d={spherePath} fill="#bfdbfe" />
-          <path d={graticulePath} fill="none" stroke="#93c5fd" strokeWidth={0.5} />
-          <path d={landPath} fill="#ecfccb" stroke="#84cc16" strokeWidth={0.6} />
-
-          {Object.values(RISK_ZONES).map(zone => {
-            const [x, y] = project([zone.coordinates.lon, zone.coordinates.lat]);
-            return (
-              <g key={zone.name}>
-                <circle cx={x} cy={y} r={14} fill="#f87171" fillOpacity={0.3} stroke="#ef4444" strokeDasharray="3 2" />
-                <text x={x} y={y + 24} textAnchor="middle" fontSize={8} fill="#b91c1c">
-                  ☠ {zone.name}
-                </text>
-              </g>
-            );
-          })}
+        <BaseMap onClick={() => setSelectedId(null)}>
+          <RiskZoneLayer />
+          <StormLayer storms={storms} />
 
           {shipsOnMap.sailing.map(s => {
             const isSelected = s.ship.id === selectedId;
@@ -161,7 +116,7 @@ export const WorldMap: React.FC = () => {
             return (
               <path
                 key={`route-${s.ship.id}`}
-                d={path({ type: 'LineString', coordinates: remaining }) ?? ''}
+                d={linePath(remaining)}
                 fill="none"
                 stroke={color}
                 strokeOpacity={selectedId && !isSelected ? 0.2 : 0.7}
@@ -175,21 +130,7 @@ export const WorldMap: React.FC = () => {
             const [x, y] = project([port.lon, port.lat]);
             const docked = shipsOnMap.docked.get(port.LOCODE) ?? [];
             return (
-              <g key={port.LOCODE}>
-                <circle cx={x} cy={y} r={5} fill="#fff" stroke="#1e3a8a" strokeWidth={2} />
-                <text
-                  x={x}
-                  y={y - 9}
-                  textAnchor="middle"
-                  fontSize={11}
-                  fontWeight={600}
-                  fill="#1e293b"
-                  stroke="#fff"
-                  strokeWidth={3}
-                  paintOrder="stroke"
-                >
-                  {port.name}
-                </text>
+              <PortMarker key={port.LOCODE} port={port}>
                 {docked.length > 0 && (
                   <g
                     className="cursor-pointer"
@@ -204,7 +145,7 @@ export const WorldMap: React.FC = () => {
                     </text>
                   </g>
                 )}
-              </g>
+              </PortMarker>
             );
           })}
 
@@ -225,6 +166,11 @@ export const WorldMap: React.FC = () => {
                 }}
               >
                 {isSelected && <circle r={12} fill={color} fillOpacity={0.2} />}
+                {s.storm && (
+                  <text x={7} y={-5} fontSize={10}>
+                    {STORM_KINDS[s.storm.kind].emoji}
+                  </text>
+                )}
                 <g transform={`rotate(${s.heading})`}>
                   <path d="M8,0 L-6,-5 L-3,0 L-6,5 Z" fill={color} stroke="#fff" strokeWidth={1.2} />
                 </g>
@@ -245,7 +191,7 @@ export const WorldMap: React.FC = () => {
               </g>
             );
           })}
-        </svg>
+        </BaseMap>
 
         {fleet.length === 0 && (
           <p className="px-5 py-3 text-sm text-slate-500 border-t border-slate-200">
@@ -267,7 +213,16 @@ export const WorldMap: React.FC = () => {
               <div className="flex items-center gap-2 text-sm text-slate-700">
                 <Navigation size={16} className="text-blue-600" />
                 {selectedSailing.originName} → {selectedSailing.destName}
+                {selectedSailing.routeLabel && (
+                  <span className="text-slate-500">（{selectedSailing.routeLabel}）</span>
+                )}
               </div>
+              {selectedSailing.storm && (
+                <div className="flex items-center gap-1 text-sm font-medium text-violet-700">
+                  <CloudLightning size={16} />
+                  {STORM_KINDS[selectedSailing.storm.kind].label}の中を減速航行中
+                </div>
+              )}
               <div className="text-sm text-slate-700">{CARGO_STYLE[selectedSailing.cargoType!].label}</div>
               <div className="flex-1 min-w-[160px]">
                 <div className="flex justify-between text-xs text-slate-500 mb-1">
@@ -318,7 +273,9 @@ export const WorldMap: React.FC = () => {
                 <span className="font-medium text-slate-800 w-40 truncate">{ship.name}</span>
                 <span className="text-slate-600">
                   {sailing
-                    ? `${sailing.originName} → ${sailing.destName}（あと${sailing.daysLeft}日）`
+                    ? `${sailing.originName} → ${sailing.destName}（あと${sailing.daysLeft}日）${
+                        sailing.storm ? ` ${STORM_KINDS[sailing.storm.kind].emoji}${STORM_KINDS[sailing.storm.kind].label}で減速中` : ''
+                      }`
                     : `${portByCode.get(ship.currentPort)?.name ?? ship.currentPort}で${STATUS_LABEL[ship.status]}`}
                 </span>
               </button>
