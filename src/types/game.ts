@@ -129,6 +129,16 @@ export interface CargoContract {
   riskLevel: number; // 0-100, affects insurance and events
 }
 
+// Paid when the ship sails, except opex: running costs are charged daily
+// whether the ship sails or not, and are included here as an estimate.
+export interface VoyageCosts {
+  fuel: number;
+  port: number;
+  cargo: number;
+  opex: number;
+  total: number;
+}
+
 export interface Voyage {
   id: string;
   shipId: string;
@@ -142,13 +152,10 @@ export interface Voyage {
   startDay: number;
   estimatedDays: number;
   currentProgress: number;
-  costs: {
-    fuel: number;
-    port: number;
-    cargo: number;
-    maintenance: number;
-    insurance: number;
-  };
+  // Empty leg from where the ship was to the loading port; the route
+  // starts with it.
+  ballastNm?: number;
+  costs: VoyageCosts;
   revenue: number;
   events: VoyageEvent[];
 }

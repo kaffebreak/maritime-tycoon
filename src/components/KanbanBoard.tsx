@@ -195,7 +195,7 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
     const destPort = ports.find(p => p.LOCODE === contract.destination);
     const revenue = contract.amount * contract.freightRate;
     
-    // 船種と場所による契約フィルタリング
+    // 船種と積載量による契約フィルタリング（離れた港の船は空船で回航する）
     const availableShips = fleet.filter(ship => {
       if (ship.status !== 'idle') return false;
       
@@ -223,22 +223,15 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
       if (!canCarryCargoType) return false;
       
       // 積載量チェック
-      if (contract.amount > shipSpec.capacity) return false;
-      
-      // 現在地と出発港の距離チェック（同じ港または近隣港のみ）
-      const currentPort = ports.find(p => p.LOCODE === ship.currentPort);
-      if (!currentPort || !originPort) return false;
-      
-      // 同じ港または同じ大陸内の港のみ
-      const isSamePort = ship.currentPort === contract.origin;
-      const isSameContinent = currentPort.continent === originPort.continent;
-      
-      return isSamePort || isSameContinent;
+      return contract.amount <= shipSpec.capacity;
     });
 
-    // 最適な船舶でのコスト計算
-    const bestShip = availableShips[0];
-    const costs = bestShip ? calculateVoyageCosts(bestShip.id, contract.id) : null;
+    // 一番安く運べる船（回航距離が短い船ほど安い）
+    const shipCosts = availableShips
+      .map(ship => ({ ship, costs: calculateVoyageCosts(ship.id, contract.id) }))
+      .sort((a, b) => a.costs.total - b.costs.total);
+    const bestShip = shipCosts[0]?.ship;
+    const costs = shipCosts[0]?.costs ?? null;
     const profit = costs ? revenue - costs.total : 0;
     const profitMargin = costs && revenue > 0 ? ((profit / revenue) * 100) : 0;
     
@@ -333,12 +326,8 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
                   <span>{formatCurrency(costs.cargo)}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>メンテナンス:</span>
-                  <span>{formatCurrency(costs.maintenance)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>保険:</span>
-                  <span>{formatCurrency(costs.insurance)}</span>
+                  <span>船員・維持費（{costs.days}日分）:</span>
+                  <span>{formatCurrency(costs.opex)}</span>
                 </div>
               </div>
             </details>
@@ -352,9 +341,8 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
             </div>
             <button
               onClick={() => {
-                const ship = availableShips[0];
-                if (ship && contract.status === 'available') {
-                  setRouteShipId(ship.id);
+                if (bestShip && contract.status === 'available') {
+                  setRouteShipId(bestShip.id);
                 }
               }}
               className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -371,7 +359,12 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
                contract.contractType === 'long_term' ? '長期契約を受ける' : '契約を受ける'}
             </button>
             <div className="text-xs text-slate-600 mt-1">
-              → {availableShips[0]?.name}
+              → {bestShip?.name}
+              {costs && costs.ballastNm > 0 && (
+                <span className="ml-1 text-amber-600">
+                  （{ports.find(p => p.LOCODE === bestShip?.currentPort)?.name}から空船回航{costs.ballastDays}日）
+                </span>
+              )}
               {costs && (
                 <span className={`ml-2 font-medium ${profit > 0 ? 'text-green-600' : 'text-red-600'}`}>
                   (利益: {formatCurrency(profit)})
@@ -415,20 +408,12 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
                   }
                 }).length;
                 
-                const wrongLocation = idleShips.filter(ship => {
-                  const currentPort = ports.find(p => p.LOCODE === ship.currentPort);
-                  return currentPort && originPort && 
-                         ship.currentPort !== contract.origin && 
-                         currentPort.continent !== originPort.continent;
-                }).length;
-                
                 const wrongCapacity = idleShips.filter(ship => {
                   const spec = shipSpecs.find(s => s.id === ship.specId);
                   return spec && contract.amount > spec.capacity;
                 }).length;
                 
                 if (wrongType > 0) return `船種不適合: ${wrongType}隻`;
-                if (wrongLocation > 0) return `位置不適合: ${wrongLocation}隻`;
                 if (wrongCapacity > 0) return `積載量不足: ${wrongCapacity}隻`;
                 return '条件不適合';
               })()}
@@ -461,9 +446,7 @@ const ShipCompatibilityIndicator: React.FC<{ ship: ShipInstance; contract: Cargo
   })();
   
   const hasCapacity = contract.amount <= shipSpec.capacity;
-  const isInRange = ship.currentPort === contract.origin || currentPort.continent === originPort.continent;
-  
-  const isCompatible = canCarryCargoType && hasCapacity && isInRange;
+  const isCompatible = canCarryCargoType && hasCapacity;
   
   return (
     <div className={`text-xs px-2 py-1 rounded-full ${
@@ -474,7 +457,6 @@ const ShipCompatibilityIndicator: React.FC<{ ship: ShipInstance; contract: Cargo
       {isCompatible ? '✓ 対応可能' : '✗ 対応不可'}
       {!canCarryCargoType && ' (船種)'}
       {!hasCapacity && ' (積載量)'}
-      {!isInRange && ' (位置)'}
     </div>
   );
 };
