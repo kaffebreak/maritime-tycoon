@@ -12,7 +12,8 @@ import { Ship, Package, MapPin, Clock, DollarSign, Plus, Settings, Repeat } from
 import { Wrench, AlertTriangle } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { ShipInstance, CargoContract } from '../types/game';
-import { ShipPurchaseModal } from './ShipPurchaseModal';
+import { ShipMarketModal } from './ShipMarketModal';
+import { OffFleetColumn, ShipDealButtons } from './ShipDeals';
 import { RouteChoiceModal } from './RouteChoiceModal';
 import { AutoContractModal } from './AutoContractModal';
 
@@ -112,6 +113,11 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
             <Ship size={14} />
             <span>積載量: {spec?.capacity.toLocaleString()}</span>
           </div>
+          {ship.charter?.kind === 'in' && (
+            <div className="text-xs text-purple-700">
+              用船中：{formatCurrency(ship.charter.dailyHire)}/日・あと{Math.max(0, ship.charter.endDay - simulationDay)}日
+            </div>
+          )}
           <div className="flex items-center gap-1">
             <MapPin size={14} />
             <span>{currentPort?.name}</span>
@@ -160,6 +166,8 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
               {ship.autoContract ? '自動契約: ON' : '自動契約設定'}
             </button>
             
+            <ShipDealButtons ship={ship} />
+
             <button
               onClick={() => setShowMaintenanceModal(true)}
               className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -661,7 +669,7 @@ export const KanbanBoard: React.FC = () => {
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus size={16} />
-            船舶購入
+            船を手当てする
           </button>
           <button
             onClick={generateContracts}
@@ -741,6 +749,8 @@ export const KanbanBoard: React.FC = () => {
           />
           
           <AssignedColumn />
+
+          <OffFleetColumn />
         </div>
 
         <DragOverlay>
@@ -753,7 +763,7 @@ export const KanbanBoard: React.FC = () => {
       </DndContext>
 
       {showPurchaseModal && (
-        <ShipPurchaseModal onClose={() => setShowPurchaseModal(false)} />
+        <ShipMarketModal onClose={() => setShowPurchaseModal(false)} />
       )}
 
       {pendingRoute && (
