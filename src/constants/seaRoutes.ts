@@ -77,6 +77,17 @@ const WAYPOINTS: Record<string, LonLat> = {
   CABO: [-110.0, 21.5],
   BAJA: [-118.0, 30.0],
   LAX_OFF: [-118.6, 33.4],
+  YELLOW_SEA: [122.8, 35.2],
+  JAVA_SEA: [111.5, -5.3],
+  LOMBOK: [115.75, -8.95],
+  NW_SHELF: [116.5, -18.0],
+  OMAN_GULF: [58.8, 24.3],
+  HORMUZ: [56.4, 26.5],
+  GULF_MID: [51.5, 27.3],
+  TUBARAO_OFF: [-39.0, -20.8],
+  FLORIDA_STRAIT: [-80.0, 24.6],
+  GULF_MEX: [-91.0, 26.5],
+  YUCATAN: [-85.8, 21.8],
 };
 
 const LANES: [string, string][] = [
@@ -158,6 +169,22 @@ const LANES: [string, string][] = [
   ['MEXICO_W', 'CABO'],
   ['CABO', 'BAJA'],
   ['BAJA', 'LAX_OFF'],
+  ['ECS', 'YELLOW_SEA'],
+  ['KYUSHU_S', 'YELLOW_SEA'],
+  ['KARIMATA', 'JAVA_SEA'],
+  ['JAVA_SEA', 'LOMBOK'],
+  ['LOMBOK', 'NW_SHELF'],
+  ['SUNDA', 'NW_SHELF'],
+  ['NW_SHELF', 'INDIAN_E'],
+  ['ARABIAN', 'OMAN_GULF'],
+  ['OMAN_GULF', 'HORMUZ'],
+  ['HORMUZ', 'GULF_MID'],
+  ['BRAZIL_E', 'TUBARAO_OFF'],
+  ['TUBARAO_OFF', 'BRAZIL_S'],
+  ['HATTERAS', 'FLORIDA_STRAIT'],
+  ['FLORIDA_STRAIT', 'GULF_MEX'],
+  ['GULF_MEX', 'YUCATAN'],
+  ['YUCATAN', 'CARIB'],
 ];
 
 // Where each port joins the lane network.
@@ -168,6 +195,12 @@ const PORT_ACCESS: Record<string, string> = {
   USNYC: 'NY_OFF',
   USLAX: 'LAX_OFF',
   DEHAM: 'ELBE',
+  AUPHE: 'NW_SHELF',
+  BRTUB: 'TUBARAO_OFF',
+  SARTA: 'GULF_MID',
+  USHOU: 'GULF_MEX',
+  NLRTM: 'NORTH_SEA',
+  CNTAO: 'YELLOW_SEA',
 };
 
 // Ships heavier than this do not fit the Panama Canal locks.

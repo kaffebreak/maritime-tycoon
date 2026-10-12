@@ -45,7 +45,7 @@ export const BUILD_DAYS = 720;
 const HISTORY_EVERY_DAYS = 7;
 const HISTORY_MAX = 520;
 
-const SEGMENT_OF_CLASS: Partial<Record<ShipClass, MarketSegment>> = {
+export const SEGMENT_OF_CLASS: Partial<Record<ShipClass, MarketSegment>> = {
   Container: 'Container',
   PCTC: 'Car',
   Tanker: 'Oil',

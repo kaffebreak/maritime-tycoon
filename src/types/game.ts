@@ -1,9 +1,10 @@
 import type { FreightMarket } from '../constants/freightMarket';
+import type { CharterOffer, NewbuildOrder, SecondhandOffer } from '../constants/shipMarket';
 
 export type CargoType = 'Container' | 'Car' | 'Bulk' | 'Oil' | 'Passenger';
 export type ShipClass = 'Container' | 'PCTC' | 'Tanker' | 'Bulker' | 'Cruise';
 export type PortSize = 'Large' | 'Medium' | 'Small';
-export type ShipStatus = 'idle' | 'sailing' | 'loading' | 'maintenance';
+export type ShipStatus = 'idle' | 'sailing' | 'loading' | 'maintenance' | 'chartered_out';
 export type Difficulty = 'Easy' | 'Normal' | 'Hard';
 export type GameSpeed = 0 | 1 | 2 | 5;
 export type WeatherCondition = 'clear' | 'rough' | 'storm' | 'fog';
@@ -24,6 +25,10 @@ export interface Port {
   lon: number;
   size: PortSize;
   supportedCargo: CargoType[];
+  // Bulk trades run one way: ore leaves mining ports for steel mills.
+  // Without these, the port both ships and receives supportedCargo.
+  exports?: CargoType[];
+  imports?: CargoType[];
   dock: number;
   fees: {
     port: number;
@@ -58,6 +63,12 @@ export interface ShipInstance {
   name: string;
   status: ShipStatus;
   currentPort: string;
+  // Simulation day the ship was delivered from the yard; earlier than day 0
+  // for ships bought secondhand.
+  builtDay?: number;
+  // Time charter: 'in' is a ship hired from another owner, 'out' is one of
+  // ours hired to someone else. Hire is paid daily until endDay.
+  charter?: { kind: 'in' | 'out'; dailyHire: number; endDay: number };
   destPort?: string;
   contractId?: string;
   etaDay: number;
@@ -347,6 +358,9 @@ export interface GameState {
   finances: CompanyFinances;
   reputation: number; // 0-100
   freightMarket: FreightMarket;
+  secondhandOffers: SecondhandOffer[];
+  charterOffers: CharterOffer[];
+  newbuildOrders: NewbuildOrder[];
   
   // NPC and Competition
   npcCompanies: NPCCompany[];
