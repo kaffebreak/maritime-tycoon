@@ -28,6 +28,8 @@ interface ShipOnMap {
   destName?: string;
   progress?: number;
   daysLeft?: number;
+  // Still on the empty leg to the loading port.
+  ballast?: boolean;
 }
 
 export const WorldMap: React.FC = () => {
@@ -71,6 +73,7 @@ export const WorldMap: React.FC = () => {
         destName: dest.name,
         progress: voyage.currentProgress,
         daysLeft: Math.max(0, Math.ceil(voyage.startDay + voyage.estimatedDays - simulationDay)),
+        ballast: !!voyage.ballastNm && !!voyage.routeNm && voyage.currentProgress < voyage.ballastNm / voyage.routeNm,
       });
     }
     return { sailing, docked };
@@ -273,7 +276,7 @@ export const WorldMap: React.FC = () => {
                 <span className="font-medium text-slate-800 w-40 truncate">{ship.name}</span>
                 <span className="text-slate-600">
                   {sailing
-                    ? `${sailing.originName} → ${sailing.destName}（あと${sailing.daysLeft}日）${
+                    ? `${sailing.ballast ? `${sailing.originName}へ空船回航中、その後 ` : ''}${sailing.originName} → ${sailing.destName}（あと${sailing.daysLeft}日）${
                         sailing.storm ? ` ${STORM_KINDS[sailing.storm.kind].emoji}${STORM_KINDS[sailing.storm.kind].label}で減速中` : ''
                       }`
                     : `${portByCode.get(ship.currentPort)?.name ?? ship.currentPort}で${STATUS_LABEL[ship.status]}`}

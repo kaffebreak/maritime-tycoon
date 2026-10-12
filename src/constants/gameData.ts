@@ -32,6 +32,21 @@ export const CREW_COSTS = {
   sailor: 150,     // USD per day
 };
 
+// Everyone aboard a merchant ship of this size, whatever its type.
+export const CREW_COMPLEMENT = { captain: 1, engineer: 4, sailor: 16 };
+export const STORES_AND_ADMIN_PER_DAY = 1000; // USD: provisions, lube oil, management fee
+
+// What a ship costs to keep each day, sailing or not: crew, upkeep,
+// insurance and running the office.
+export const dailyOperatingCost = (spec: { buildCost: number }) => {
+  const crew =
+    CREW_COMPLEMENT.captain * CREW_COSTS.captain +
+    CREW_COMPLEMENT.engineer * CREW_COSTS.engineer +
+    CREW_COMPLEMENT.sailor * CREW_COSTS.sailor;
+  const upkeep = (spec.buildCost * (COST_FACTORS.maintenanceRate + COST_FACTORS.insuranceRate)) / DAYS_PER_YEAR;
+  return crew + upkeep + STORES_AND_ADMIN_PER_DAY;
+};
+
 export const MAINTENANCE_INTERVALS = {
   minor: 90,       // days - routine maintenance
   major: 365,      // days - major overhaul
