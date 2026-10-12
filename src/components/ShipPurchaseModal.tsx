@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { X, Ship, DollarSign, Zap, Fuel } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
+import { shipPrice, shipPriceFactor } from '../constants/freightMarket';
 
 interface ShipPurchaseModalProps {
   onClose: () => void;
 }
 
 export const ShipPurchaseModal: React.FC<ShipPurchaseModalProps> = ({ onClose }) => {
-  const { shipSpecs, cash, purchaseShip, formatCurrency } = useGameStore();
+  const { shipSpecs, cash, purchaseShip, formatCurrency, freightMarket } = useGameStore();
+  // Shipyards charge more when freight rates are high.
+  const priceOf = (spec: (typeof shipSpecs)[number]) => shipPrice(freightMarket, spec);
   const [selectedSpec, setSelectedSpec] = useState<string>('');
   const [shipName, setShipName] = useState('');
 
@@ -19,7 +22,7 @@ export const ShipPurchaseModal: React.FC<ShipPurchaseModalProps> = ({ onClose })
   };
 
   const selectedShipSpec = shipSpecs.find(s => s.id === selectedSpec);
-  const canAfford = selectedShipSpec ? cash >= selectedShipSpec.buildCost : false;
+  const canAfford = selectedShipSpec ? cash >= priceOf(selectedShipSpec) : false;
 
   const getShipIcon = (shipClass: string) => {
     switch (shipClass) {
@@ -73,10 +76,13 @@ export const ShipPurchaseModal: React.FC<ShipPurchaseModalProps> = ({ onClose })
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-slate-800">
-                        {formatCurrency(spec.buildCost)}
+                        {formatCurrency(priceOf(spec))}
                       </div>
-                      <div className={`text-sm ${cash >= spec.buildCost ? 'text-green-600' : 'text-red-600'}`}>
-                        {cash >= spec.buildCost ? '購入可能' : '資金不足'}
+                      <div className="text-xs text-slate-500">
+                        相場 {Math.round(shipPriceFactor(freightMarket, spec.class) * 100)}%
+                      </div>
+                      <div className={`text-sm ${cash >= priceOf(spec) ? 'text-green-600' : 'text-red-600'}`}>
+                        {cash >= priceOf(spec) ? '購入可能' : '資金不足'}
                       </div>
                     </div>
                   </div>
@@ -127,7 +133,7 @@ export const ShipPurchaseModal: React.FC<ShipPurchaseModalProps> = ({ onClose })
                     </div>
                     <div className="flex justify-between border-t pt-2">
                       <span>建造費:</span>
-                      <span className="font-bold text-lg">{formatCurrency(selectedShipSpec.buildCost)}</span>
+                      <span className="font-bold text-lg">{formatCurrency(priceOf(selectedShipSpec))}</span>
                     </div>
                   </div>
                 </div>
@@ -153,7 +159,7 @@ export const ShipPurchaseModal: React.FC<ShipPurchaseModalProps> = ({ onClose })
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-slate-600">購入後残高:</span>
                     <span className={`font-medium ${canAfford ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(cash - selectedShipSpec.buildCost)}
+                      {formatCurrency(cash - priceOf(selectedShipSpec))}
                     </span>
                   </div>
                 </div>
