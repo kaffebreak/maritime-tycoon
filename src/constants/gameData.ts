@@ -75,6 +75,40 @@ export const MAINTENANCE_CONDITION_RESTORE = {
   emergency: 25,   // +25 condition points
 };
 
+// A large port added for the bulk and tanker trades.
+function tradePort(
+  LOCODE: string,
+  name: string,
+  country: string,
+  continent: string,
+  lat: number,
+  lon: number,
+  trade: { exports?: CargoType[]; imports?: CargoType[] },
+  weatherRisk: number,
+): Port {
+  const supportedCargo = Array.from(new Set([...(trade.exports ?? []), ...(trade.imports ?? [])]));
+  return {
+    LOCODE,
+    name,
+    country,
+    continent,
+    lat,
+    lon,
+    size: 'Large',
+    supportedCargo,
+    exports: trade.exports ?? [],
+    imports: trade.imports ?? [],
+    dock: 4,
+    fees: {
+      port: 7000,
+      cargo: { Container: 120, Car: 60, Bulk: 6, Oil: 5, Passenger: 25 },
+    },
+    congestion: 50,
+    facilities: { cranes: 6, storage: 50000, fuel: true, repair: false },
+    weatherRisk,
+  };
+}
+
 export const SAMPLE_PORTS: Port[] = [
   {
     LOCODE: 'JPTYO',
@@ -84,13 +118,15 @@ export const SAMPLE_PORTS: Port[] = [
     lat: 35.63,
     lon: 139.81,
     size: 'Large',
-    supportedCargo: ['Container', 'Car'],
+    supportedCargo: ['Container', 'Car', 'Bulk', 'Oil'],
+    exports: ['Container', 'Car'],
+    imports: ['Container', 'Car', 'Bulk', 'Oil'],
     dock: 5,
     fees: {
       port: 8000,
       cargo: {
-        Container: 12,
-        Car: 15,
+        Container: 120,
+        Car: 60,
         Bulk: 8,
         Oil: 6,
         Passenger: 25,
@@ -113,13 +149,15 @@ export const SAMPLE_PORTS: Port[] = [
     lat: 31.23,
     lon: 121.47,
     size: 'Large',
-    supportedCargo: ['Container', 'Bulk'],
+    supportedCargo: ['Container', 'Bulk', 'Oil'],
+    exports: ['Container'],
+    imports: ['Container', 'Bulk', 'Oil'],
     dock: 8,
     fees: {
       port: 6000,
       cargo: {
-        Container: 10,
-        Car: 12,
+        Container: 100,
+        Car: 48,
         Bulk: 6,
         Oil: 5,
         Passenger: 20,
@@ -147,8 +185,8 @@ export const SAMPLE_PORTS: Port[] = [
     fees: {
       port: 7000,
       cargo: {
-        Container: 11,
-        Car: 14,
+        Container: 110,
+        Car: 56,
         Bulk: 7,
         Oil: 5,
         Passenger: 22,
@@ -176,8 +214,8 @@ export const SAMPLE_PORTS: Port[] = [
     fees: {
       port: 9000,
       cargo: {
-        Container: 15,
-        Car: 18,
+        Container: 150,
+        Car: 72,
         Bulk: 10,
         Oil: 8,
         Passenger: 30,
@@ -205,8 +243,8 @@ export const SAMPLE_PORTS: Port[] = [
     fees: {
       port: 8500,
       cargo: {
-        Container: 14,
-        Car: 17,
+        Container: 140,
+        Car: 68,
         Bulk: 9,
         Oil: 7,
         Passenger: 28,
@@ -229,13 +267,15 @@ export const SAMPLE_PORTS: Port[] = [
     lat: 53.55,
     lon: 9.99,
     size: 'Large',
-    supportedCargo: ['Container', 'Bulk'],
+    supportedCargo: ['Container', 'Car', 'Bulk'],
+    exports: ['Container', 'Car'],
+    imports: ['Container', 'Car', 'Bulk'],
     dock: 5,
     fees: {
       port: 7500,
       cargo: {
-        Container: 13,
-        Car: 16,
+        Container: 130,
+        Car: 64,
         Bulk: 8,
         Oil: 6,
         Passenger: 25,
@@ -250,56 +290,40 @@ export const SAMPLE_PORTS: Port[] = [
     },
     weatherRisk: 40,
   },
+  tradePort('AUPHE', 'Port Hedland', 'AU', 'Oceania', -20.31, 118.58, { exports: ['Bulk'] }, 25),
+  tradePort('BRTUB', 'Tubarão', 'BR', 'South America', -20.29, -40.24, { exports: ['Bulk'] }, 20),
+  tradePort('SARTA', 'Ras Tanura', 'SA', 'Middle East', 26.64, 50.16, { exports: ['Oil'] }, 15),
+  tradePort('USHOU', 'Houston', 'US', 'North America', 29.73, -95.02, { exports: ['Oil', 'Bulk'], imports: ['Container', 'Car'] }, 45),
+  tradePort('NLRTM', 'Rotterdam', 'NL', 'Europe', 51.95, 4.05, { exports: ['Container'], imports: ['Container', 'Car', 'Bulk', 'Oil'] }, 35),
+  tradePort('CNTAO', 'Qingdao', 'CN', 'Asia', 36.07, 120.32, { exports: ['Container'], imports: ['Container', 'Bulk', 'Oil'] }, 20),
 ];
 
+// Fuel burn is per 100 nm at service speed; prices are newbuild prices in a
+// normal market.
 export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
   {
-    id: 'ULCS-1',
-    class: 'Container',
-    subclass: 'Ultra Large',
-    dwtOrGt: 200000,
-    capacity: 20000, // TEU
-    speedKt: 22,
-    fuelBurn100nm: 45,
-    buildCost: 180_000_000, // Increased cost
-    reliability: 85,
+    id: 'BULK-HANDY',
+    class: 'Bulker',
+    subclass: 'Handysize',
+    dwtOrGt: 38000,
+    capacity: 38000, // tonnes
+    speedKt: 13.5,
+    fuelBurn100nm: 7,
+    buildCost: 27_000_000,
+    reliability: 90,
     fuelEfficiency: 1.0,
   },
   {
-    id: 'FEEDER-1',
-    class: 'Container',
-    subclass: 'Feeder',
-    dwtOrGt: 15000,
-    capacity: 1200, // TEU
-    speedKt: 18,
-    fuelBurn100nm: 12,
-    buildCost: 35_000_000, // Increased cost
-    reliability: 90,
-    fuelEfficiency: 1.1,
-  },
-  {
-    id: 'PCTC-1',
-    class: 'PCTC',
-    subclass: 'Large',
-    dwtOrGt: 60000,
-    capacity: 6000, // CEU
-    speedKt: 20,
-    fuelBurn100nm: 35,
-    buildCost: 95_000_000, // Increased cost
+    id: 'BULK-PMAX',
+    class: 'Bulker',
+    subclass: 'Panamax',
+    dwtOrGt: 82000,
+    capacity: 82000, // tonnes
+    speedKt: 13.5,
+    fuelBurn100nm: 10,
+    buildCost: 34_000_000,
     reliability: 88,
-    fuelEfficiency: 1.05,
-  },
-  {
-    id: 'VLCC-1',
-    class: 'Tanker',
-    subclass: 'VLCC',
-    dwtOrGt: 300000,
-    capacity: 300000, // tonnes
-    speedKt: 16,
-    fuelBurn100nm: 55,
-    buildCost: 140_000_000, // Increased cost
-    reliability: 82,
-    fuelEfficiency: 0.95,
+    fuelEfficiency: 1.0,
   },
   {
     id: 'BULK-1',
@@ -307,21 +331,139 @@ export const SAMPLE_SHIP_SPECS: ShipSpec[] = [
     subclass: 'Capesize',
     dwtOrGt: 180000,
     capacity: 180000, // tonnes
-    speedKt: 14,
-    fuelBurn100nm: 40,
-    buildCost: 75_000_000, // Increased cost
+    speedKt: 13,
+    fuelBurn100nm: 15,
+    buildCost: 62_000_000,
     reliability: 87,
     fuelEfficiency: 1.02,
   },
+  {
+    id: 'TANKER-MR',
+    class: 'Tanker',
+    subclass: 'MR',
+    dwtOrGt: 50000,
+    capacity: 50000, // tonnes
+    speedKt: 14,
+    fuelBurn100nm: 8,
+    buildCost: 42_000_000,
+    reliability: 89,
+    fuelEfficiency: 1.0,
+  },
+  {
+    id: 'TANKER-AFRA',
+    class: 'Tanker',
+    subclass: 'Aframax',
+    dwtOrGt: 115000,
+    capacity: 115000, // tonnes
+    speedKt: 14,
+    fuelBurn100nm: 12,
+    buildCost: 62_000_000,
+    reliability: 86,
+    fuelEfficiency: 1.0,
+  },
+  {
+    id: 'VLCC-1',
+    class: 'Tanker',
+    subclass: 'VLCC',
+    dwtOrGt: 300000,
+    capacity: 300000, // tonnes
+    speedKt: 14.5,
+    fuelBurn100nm: 20,
+    buildCost: 120_000_000,
+    reliability: 82,
+    fuelEfficiency: 0.95,
+  },
+  {
+    id: 'FEEDER-1',
+    class: 'Container',
+    subclass: 'Feeder',
+    dwtOrGt: 15000,
+    capacity: 1200, // TEU
+    speedKt: 17,
+    fuelBurn100nm: 5.5,
+    buildCost: 22_000_000,
+    reliability: 90,
+    fuelEfficiency: 1.1,
+  },
+  {
+    id: 'CONT-PMAX',
+    class: 'Container',
+    subclass: 'Panamax',
+    dwtOrGt: 65000,
+    capacity: 5000, // TEU
+    speedKt: 19,
+    fuelBurn100nm: 14,
+    buildCost: 60_000_000,
+    reliability: 88,
+    fuelEfficiency: 1.0,
+  },
+  {
+    id: 'ULCS-1',
+    class: 'Container',
+    subclass: 'Ultra Large',
+    dwtOrGt: 200000,
+    capacity: 20000, // TEU
+    speedKt: 21,
+    fuelBurn100nm: 35,
+    buildCost: 150_000_000,
+    reliability: 85,
+    fuelEfficiency: 1.0,
+  },
+  {
+    id: 'PCTC-1',
+    class: 'PCTC',
+    subclass: 'Large',
+    dwtOrGt: 60000,
+    capacity: 6000, // CEU
+    speedKt: 19,
+    fuelBurn100nm: 10,
+    buildCost: 70_000_000,
+    reliability: 88,
+    fuelEfficiency: 1.05,
+  },
 ];
 
-export const FREIGHT_RATES: Record<CargoType, number> = {
-  Container: 1200, // USD per TEU
-  Car: 800,        // USD per CEU
-  Bulk: 25,        // USD per tonne
-  Oil: 35,         // USD per tonne
-  Passenger: 150,  // USD per PAX
+// Freight per unit in a normal market: a fixed part plus a part per
+// 1,000 nm of sea route. Bulk and oil are carried free in and out (the
+// cargo owner pays loading and discharging), so only the box and car
+// trades pay cargo handling.
+export const FREIGHT_RATES: Record<CargoType, { base: number; per1000nm: number }> = {
+  Container: { base: 200, per1000nm: 90 }, // USD per TEU
+  Car: { base: 60, per1000nm: 55 }, // USD per CEU
+  Bulk: { base: 2.8, per1000nm: 2.0 }, // USD per tonne, for a Capesize lot
+  Oil: { base: 3.1, per1000nm: 1.65 }, // USD per tonne, for a VLCC lot
+  Passenger: { base: 50, per1000nm: 30 }, // USD per PAX
 };
+
+export const HANDLING_PAID_BY_OWNER: Record<CargoType, boolean> = {
+  Container: true,
+  Car: true,
+  Bulk: false,
+  Oil: false,
+  Passenger: true,
+};
+
+// Typical lot sizes shippers offer, matching the ship sizes in each trade.
+export const CARGO_LOTS: Record<CargoType, number[]> = {
+  Bulk: [35000, 60000, 75000, 165000],
+  Oil: [45000, 80000, 105000, 270000],
+  Container: [800, 1100, 2500, 4500, 6000],
+  Car: [1500, 3000, 5500],
+  Passenger: [500],
+};
+
+// Small lots pay more per unit than full big-ship cargoes, as they do in
+// the real market: rate × (largest lot / this lot) ^ this.
+export const LOT_SIZE_PREMIUM: Record<CargoType, number> = {
+  Bulk: 0.45,
+  Oil: 0.45,
+  Container: 0.15,
+  Car: 0.15,
+  Passenger: 0,
+};
+
+// Days alongside to load or discharge, each end.
+export const PORT_DAYS = 2;
 
 export const EVENT_PROBABILITIES = {
   weather: 0.04,      // 4% per ship per day

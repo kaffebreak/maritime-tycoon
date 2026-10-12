@@ -13,6 +13,7 @@ const STATUS_LABEL: Record<ShipInstance['status'], string> = {
   sailing: '航行中',
   loading: '積込中',
   maintenance: '整備中',
+  chartered_out: '貸出中',
 };
 
 interface ShipOnMap {
