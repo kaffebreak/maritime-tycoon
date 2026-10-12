@@ -133,6 +133,12 @@ export interface Voyage {
   id: string;
   shipId: string;
   contractId: string;
+  // Sea route the ship follows, as [lon, lat] points, and its name.
+  route?: [number, number][];
+  routeLabel?: string;
+  routeNm?: number;
+  // Storm the ship is currently caught in, so it is reported once.
+  stormId?: string;
   startDay: number;
   estimatedDays: number;
   currentProgress: number;
@@ -145,6 +151,19 @@ export interface Voyage {
   };
   revenue: number;
   events: VoyageEvent[];
+}
+
+export type StormKind = 'typhoon' | 'hurricane' | 'cyclone' | 'winter_storm' | 'fog';
+
+export interface Storm {
+  id: string;
+  kind: StormKind;
+  areaName: string;
+  lon: number;
+  lat: number;
+  radiusNm: number;
+  drift: [number, number]; // degrees of [lon, lat] per day
+  daysLeft: number;
 }
 
 export interface VoyageEvent {
@@ -313,6 +332,7 @@ export interface GameState {
   fuelPrice: number;
   globalEvents: VoyageEvent[];
   newGlobalEvents: GlobalEvent[];
+  storms: Storm[];
   marketConditions: MarketConditions;
   achievements: Achievement[];
   finances: CompanyFinances;
