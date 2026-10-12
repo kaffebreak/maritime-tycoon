@@ -10,6 +10,7 @@ import { RankingPanel } from './components/RankingPanel';
 import { MarketNewsPanel } from './components/MarketNewsPanel';
 import { WorldMap } from './components/WorldMap';
 import { MarketPanel } from './components/MarketPanel';
+import { GameOverModal } from './components/GameOverModal';
 import { useGameStore } from './store/gameStore';
 import { useGameTick } from './hooks/useGameTick';
 import { BarChart3, Kanban, LineChart } from 'lucide-react';
@@ -24,8 +25,13 @@ function App() {
   
   useGameTick();
 
-  const handleCompanySetup = (companyName: string, founderName: string, difficulty: 'Easy' | 'Normal' | 'Hard') => {
-    initializeGame(companyName, founderName, difficulty);
+  const handleCompanySetup = (
+    companyName: string,
+    founderName: string,
+    difficulty: 'Easy' | 'Normal' | 'Hard',
+    scenarioId: string,
+  ) => {
+    initializeGame(companyName, founderName, difficulty, scenarioId);
     setShowSetup(false);
   };
 
@@ -88,6 +94,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 to-blue-50">
       <GameHeader />
+      <GameOverModal onNewGame={() => setShowSetup(true)} />
       
       {/* Navigation Tabs */}
       <div className="bg-white border-b border-slate-200 shadow-sm">

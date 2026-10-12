@@ -1,19 +1,21 @@
 import React, { useState } from 'react';
-import { Building2, User, DollarSign, Anchor } from 'lucide-react';
+import { Building2, User, DollarSign, Anchor, Flag } from 'lucide-react';
+import { SCENARIOS } from '../constants/scenarios';
 
 interface CompanySetupModalProps {
-  onComplete: (companyName: string, founderName: string, difficulty: 'Easy' | 'Normal' | 'Hard') => void;
+  onComplete: (companyName: string, founderName: string, difficulty: 'Easy' | 'Normal' | 'Hard', scenarioId: string) => void;
 }
 
 export const CompanySetupModal: React.FC<CompanySetupModalProps> = ({ onComplete }) => {
   const [companyName, setCompanyName] = useState('');
   const [founderName, setFounderName] = useState('');
   const [difficulty, setDifficulty] = useState<'Easy' | 'Normal' | 'Hard'>('Normal');
+  const [scenarioId, setScenarioId] = useState(SCENARIOS[0].id);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (companyName.trim() && founderName.trim()) {
-      onComplete(companyName.trim(), founderName.trim(), difficulty);
+      onComplete(companyName.trim(), founderName.trim(), difficulty, scenarioId);
     }
   };
 
@@ -40,7 +42,7 @@ export const CompanySetupModal: React.FC<CompanySetupModalProps> = ({ onComplete
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl p-8 max-w-2xl w-full mx-4">
+      <div className="bg-white rounded-lg shadow-xl p-8 max-w-2xl w-full mx-4 max-h-[95vh] overflow-y-auto">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Anchor className="text-blue-600" size={48} />
@@ -80,6 +82,35 @@ export const CompanySetupModal: React.FC<CompanySetupModalProps> = ({ onComplete
               className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
               required
             />
+          </div>
+
+          {/* Scenario Selection */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-3">
+              <Flag size={16} className="inline mr-2" />
+              シナリオ
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {SCENARIOS.map(scenario => (
+                <button
+                  key={scenario.id}
+                  type="button"
+                  onClick={() => setScenarioId(scenario.id)}
+                  className={`w-full p-3 rounded-lg border-2 text-left transition-all ${
+                    scenarioId === scenario.id
+                      ? 'bg-blue-50 border-blue-500'
+                      : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className={`font-bold ${scenarioId === scenario.id ? 'text-blue-700' : 'text-slate-800'}`}>
+                    {scenario.title}
+                    {scenario.years && <span className="ml-2 text-xs font-normal text-slate-500">{scenario.years}年</span>}
+                  </div>
+                  <p className="text-xs text-slate-600 mt-1">{scenario.description}</p>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">どのシナリオでも、資金がマイナスのまま30日たつと倒産します。</p>
           </div>
 
           {/* Difficulty Selection */}

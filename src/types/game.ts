@@ -361,6 +361,15 @@ export interface GameState {
   secondhandOffers: SecondhandOffer[];
   charterOffers: CharterOffer[];
   newbuildOrders: NewbuildOrder[];
+
+  // Scenario being played, the company value it started from, and how it ended.
+  scenarioId: string;
+  startValue: number;
+  // Company value at the start of each month.
+  valueHistory: { day: number; value: number }[];
+  // First day of the current run of negative cash.
+  cashNegativeSince?: number;
+  gameOver?: { result: 'won' | 'lost' | 'bankrupt' | 'finished'; day: number; value: number };
   
   // NPC and Competition
   npcCompanies: NPCCompany[];

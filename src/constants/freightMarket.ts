@@ -174,3 +174,37 @@ export const createFreightMarket = (startDay: number, random: () => number = Mat
   }
   return market;
 };
+
+// Push every segment to roughly `level` (1 = normal) with demand to match,
+// so the market stays there until ships are built or scrapped. A large
+// orderbook means a wave of new ships is already on the way.
+export const setMarketLevel = (
+  market: FreightMarket,
+  day: number,
+  level: number,
+  orderbookShareOfFleet: number,
+  random: () => number = Math.random,
+): FreightMarket => {
+  const segments = Object.fromEntries(
+    MARKET_SEGMENTS.map(s => {
+      const seg = market.segments[s];
+      const index = Math.min(INDEX_MAX, Math.max(INDEX_MIN, level * (0.9 + random() * 0.2)));
+      const elasticity = index > 1 ? ELASTICITY_SHORTAGE : ELASTICITY_SURPLUS;
+      const months = BUILD_DAYS / 30;
+      return [
+        s,
+        {
+          index,
+          supply: seg.supply,
+          demand: seg.supply * Math.pow(index, 1 / elasticity),
+          orderbook: Array.from({ length: months }, (_, i) => ({
+            deliveryDay: day + (i + 1) * 30,
+            amount: (seg.supply * orderbookShareOfFleet) / months,
+          })),
+        },
+      ];
+    }),
+  ) as Record<MarketSegment, SegmentMarket>;
+  const latest = { day, index: Object.fromEntries(MARKET_SEGMENTS.map(s => [s, segments[s].index])) as Record<MarketSegment, number> };
+  return { segments, history: [...market.history.filter(h => h.day < day), latest] };
+};
