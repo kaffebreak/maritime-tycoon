@@ -12,15 +12,15 @@ import {
   SEASONAL_DEMAND_MULTIPLIERS,
   NPC_COMPANY_NAMES,
   NPC_STRATEGIES,
-  REGIONAL_WEATHER_PATTERNS,
   GLOBAL_EVENT_TEMPLATES,
   FUEL_PRICE_FACTORS,
   ECONOMIC_CYCLES,
-  RISK_ZONES,
   DIFFICULTY_EVENT_MODIFIERS,
   RANDOM_EVENTS
 } from '../constants/gameData';
 import { v4 as uuidv4 } from 'uuid';
+import { getRouteOptions, pirateZoneAt, pointAlongRoute, RouteOption } from '../constants/seaRoutes';
+import { advanceStorms, stormAt, STORM_KINDS } from '../constants/weather';
 
 interface GameStore extends GameState {
   // Actions
@@ -35,12 +35,12 @@ interface GameStore extends GameState {
   
   // Contract management
   generateContracts: () => void;
-  assignContract: (contractId: string, shipId: string) => void;
+  assignContract: (contractId: string, shipId: string, route?: RouteOption) => void;
   setAutoContract: (shipId: string, enabled: boolean, settings?: any) => void;
   processAutoContracts: () => void;
   
   // Voyage management
-  startVoyage: (shipId: string, contractId: string) => void;
+  startVoyage: (shipId: string, contractId: string, route?: RouteOption) => void;
   updateVoyages: () => void;
   
   // Event system
@@ -54,7 +54,8 @@ interface GameStore extends GameState {
   
   // Utilities
   formatCurrency: (amount: number) => string;
-  calculateVoyageCosts: (shipId: string, contractId: string) => {
+  getRouteOptionsFor: (shipId: string, contractId: string) => RouteOption[];
+  calculateVoyageCosts: (shipId: string, contractId: string, route?: RouteOption) => {
     fuel: number;
     port: number;
     cargo: number;
@@ -148,6 +149,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   globalEvents: [],
   
   newGlobalEvents: [],
+  storms: [],
   marketConditions: {
     season: 'spring',
     weatherPatterns: {},
@@ -274,6 +276,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rankings: [],
       marketNews: [],
       reputation: 50,
+      storms: Array.from({ length: 6 }).reduce<GameState['storms']>(
+        storms => advanceStorms(storms, get().marketConditions.season).storms,
+        [],
+      ),
     });
     
     // Initialize NPC companies after setting initial state
@@ -472,7 +478,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  assignContract: (contractId, shipId) => {
+  assignContract: (contractId, shipId, route) => {
     const state = get();
     const contract = state.contracts.find(c => c.id === contractId);
     const ship = state.fleet.find(s => s.id === shipId);
@@ -492,10 +498,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }));
 
     // Start voyage after assignment
-    setTimeout(() => get().startVoyage(shipId, contractId), 100);
+    setTimeout(() => get().startVoyage(shipId, contractId, route), 100);
   },
 
-  startVoyage: (shipId, contractId) => {
+  startVoyage: (shipId, contractId, chosenRoute) => {
     const state = get();
     const ship = state.fleet.find(s => s.id === shipId);
     const contract = state.contracts.find(c => c.id === contractId);
@@ -503,8 +509,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     if (!ship || !contract || !shipSpec) return;
 
-    const estimatedDays = Math.ceil(contract.distanceNm / shipSpec.speedKt / 24);
-    const costs = get().calculateVoyageCosts(shipId, contractId);
+    const route = chosenRoute ?? get().getRouteOptionsFor(shipId, contractId)[0];
+    const distanceNm = route?.distanceNm ?? contract.distanceNm;
+    const estimatedDays = Math.ceil(distanceNm / shipSpec.speedKt / 24);
+    const costs = get().calculateVoyageCosts(shipId, contractId, route);
 
     const voyage: Voyage = {
       id: uuidv4(),
@@ -513,6 +521,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       startDay: state.simulationDay,
       estimatedDays,
       currentProgress: 0,
+      route: route?.points,
+      routeLabel: route?.label,
+      routeNm: route?.distanceNm,
       costs,
       revenue: contract.amount * contract.freightRate,
       events: [],
@@ -540,11 +551,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     set(prevState => {
       const updatedVoyages = prevState.activeVoyages.map(voyage => {
-        const elapsed = state.simulationDay - voyage.startDay;
-        const dailyProgress = 1 / voyage.estimatedDays;
+        // Storms slow a ship down for the day it spends inside them.
+        const storm = voyage.route && stormAt(prevState.storms, pointAlongRoute(voyage.route, voyage.currentProgress));
+        const speedFactor = storm ? STORM_KINDS[storm.kind].speedFactor : 1;
+        const dailyProgress = speedFactor / voyage.estimatedDays;
         const newProgress = Math.min(1, voyage.currentProgress + dailyProgress);
         
-        return { ...voyage, currentProgress: newProgress };
+        return {
+          ...voyage,
+          currentProgress: newProgress,
+          estimatedDays: voyage.estimatedDays + (1 - speedFactor),
+        };
       });
         
       // Check for completed voyages
@@ -728,29 +745,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     const multiplier = DIFFICULTY_MULTIPLIERS[state.difficulty];
 
-    // Basic random events (keeping existing functionality)
-    state.fleet.filter(s => s.status === 'sailing').forEach(ship => {
-      if (Math.random() < EVENT_PROBABILITIES.weather * multiplier.probability * 0.5) { // Reduced since we have dedicated weather system
-        const event: VoyageEvent = {
-          id: uuidv4(),
-          type: 'weather',
-          message: '悪天候により航行が遅延しています',
-          day: state.simulationDay,
-          impact: { delayDays: 1 * multiplier.effect },
-          duration: 1,
-          severity: 'minor',
-        };
-
-        set(prevState => ({
-          activeVoyages: prevState.activeVoyages.map(v =>
-            v.shipId === ship.id
-              ? { ...v, events: [...v.events, event], estimatedDays: v.estimatedDays + (event.impact.delayDays || 0) }
-              : v
-          ),
-        }));
-      }
-    });
-
     // Basic fuel surge (complementing the detailed fuel system)
     if (Math.random() < EVENT_PROBABILITIES.fuel_surge * multiplier.probability) {
       const event: VoyageEvent = {
@@ -780,65 +774,49 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   triggerWeatherEvents: () => {
     const state = get();
-    const currentSeason = state.marketConditions.season;
-    
-    // Regional weather events
-    Object.keys(REGIONAL_WEATHER_PATTERNS).forEach(region => {
-      const patterns = REGIONAL_WEATHER_PATTERNS[region][currentSeason];
-      
-      Object.entries(patterns).forEach(([weatherType, probability]) => {
-        if (Math.random() < probability) {
-          const shipsInRegion = state.fleet.filter(ship => {
-            const currentPort = state.ports.find(p => p.LOCODE === ship.currentPort);
-            return currentPort?.continent === region && ship.status === 'sailing';
-          });
-          
-          if (shipsInRegion.length > 0) {
-            const severity = Math.random() < 0.1 ? 'severe' : Math.random() < 0.3 ? 'moderate' : 'minor';
-            const impact = {
-              minor: { delayDays: 0.5, fuelMultiplier: 1.1 },
-              moderate: { delayDays: 1.5, fuelMultiplier: 1.2, costMultiplier: 1.1 },
-              severe: { delayDays: 3, fuelMultiplier: 1.4, costMultiplier: 1.3 },
-            }[severity];
-            
-            const weatherMessages = {
-              typhoon: `${region}で台風が発生し、航行に大きな影響が出ています`,
-              winter_storm: `${region}で冬季嵐により航行が困難になっています`,
-              storm: `${region}で嵐により航行が遅延しています`,
-              fog: `${region}で濃霧により視界が悪化しています`,
-            };
-            
-            const event: VoyageEvent = {
-              id: uuidv4(),
-              type: weatherType as any,
-              message: weatherMessages[weatherType] || `${region}で悪天候が発生しています`,
-              day: state.simulationDay,
-              impact,
-              duration: severity === 'severe' ? 5 : severity === 'moderate' ? 3 : 1,
-              severity: severity as any,
-              affectedRegions: [region],
-            };
-            
-            // Apply to all ships in the region
-            set(prevState => ({
-              activeVoyages: prevState.activeVoyages.map(voyage => {
-                const ship = shipsInRegion.find(s => s.id === voyage.shipId);
-                return ship ? {
-                  ...voyage,
-                  events: [...voyage.events, event],
-                  estimatedDays: voyage.estimatedDays + (impact.delayDays || 0),
-                  costs: {
-                    ...voyage.costs,
-                    fuel: voyage.costs.fuel * (impact.fuelMultiplier || 1),
-                    total: voyage.costs.total * (impact.costMultiplier || 1),
-                  },
-                } : voyage;
-              }),
-            }));
-          }
-        }
+    const { storms, spawned } = advanceStorms(state.storms, state.marketConditions.season);
+
+    spawned
+      .filter(storm => storm.kind !== 'fog')
+      .forEach(storm => {
+        get().generateMarketNews('weather', 'global', `${storm.areaName}で${STORM_KINDS[storm.kind].label}が発生しました`);
       });
+
+    const damage: Record<string, number> = {};
+    const activeVoyages = state.activeVoyages.map(voyage => {
+      const ship = state.fleet.find(s => s.id === voyage.shipId);
+      if (!ship || !voyage.route) return voyage;
+
+      const storm = stormAt(storms, pointAlongRoute(voyage.route, voyage.currentProgress));
+      if (!storm) return voyage.stormId ? { ...voyage, stormId: undefined } : voyage;
+
+      const info = STORM_KINDS[storm.kind];
+      damage[ship.id] = info.damagePerDay;
+      if (voyage.stormId === storm.id) return voyage;
+
+      const message = `${ship.name}が${storm.areaName}の${info.label}に入り、減速しています`;
+      get().generateMarketNews('weather', 'player', message);
+      const event: VoyageEvent = {
+        id: uuidv4(),
+        type: storm.kind === 'fog' ? 'fog_delay' : storm.kind === 'winter_storm' ? 'winter_storm' : 'typhoon',
+        message,
+        day: state.simulationDay,
+        impact: {},
+        duration: storm.daysLeft,
+        severity: info.damagePerDay >= 3 ? 'severe' : info.damagePerDay > 0 ? 'moderate' : 'minor',
+      };
+      return { ...voyage, stormId: storm.id, events: [...voyage.events, event] };
     });
+
+    set(prevState => ({
+      storms,
+      activeVoyages: prevState.activeVoyages.map(v => activeVoyages.find(u => u.id === v.id) ?? v),
+      fleet: prevState.fleet.map(ship =>
+        damage[ship.id]
+          ? { ...ship, condition: Math.max(0, (ship.condition ?? 100) - damage[ship.id]) }
+          : ship
+      ),
+    }));
   },
 
   updateFuelPrices: () => {
@@ -1317,36 +1295,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const state = get();
     const multiplier = DIFFICULTY_MULTIPLIERS[state.difficulty];
 
-    // E1: 悪天候 (4% per ship per day)
-    state.fleet.filter(s => s.status === 'sailing').forEach(ship => {
-      if (Math.random() < RANDOM_EVENTS.E1.probability * multiplier.probability) {
-        const event: VoyageEvent = {
-          id: uuidv4(),
-          type: 'weather',
-          message: `${ship.name}が悪天候に遭遇し、航行が遅延しています`,
-          day: state.simulationDay,
-          impact: { 
-            delayDays: 1,
-            costMultiplier: RANDOM_EVENTS.E1.effects.voyageDelayMultiplier 
-          },
-          duration: RANDOM_EVENTS.E1.duration,
-          severity: RANDOM_EVENTS.E1.severity,
-        };
-
-        set(prevState => ({
-          activeVoyages: prevState.activeVoyages.map(v =>
-            v.shipId === ship.id
-              ? { 
-                  ...v, 
-                  events: [...v.events, event],
-                  estimatedDays: v.estimatedDays * RANDOM_EVENTS.E1.effects.voyageDelayMultiplier
-                }
-              : v
-          ),
-        }));
-      }
-    });
-
     // E2: 港ストライキ (0.5% per port per day)
     state.ports.forEach(port => {
       if (Math.random() < RANDOM_EVENTS.E2.probability * multiplier.probability) {
@@ -1470,26 +1418,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const voyage = state.activeVoyages.find(v => v.shipId === shipId);
     if (!voyage) return null;
 
-    const contract = state.contracts.find(c => c.id === voyage.contractId);
-    if (!contract) return null;
-
-    const originPort = state.ports.find(p => p.LOCODE === contract.origin);
-    const destPort = state.ports.find(p => p.LOCODE === contract.destination);
-    if (!originPort || !destPort) return null;
-
-    // Check if route passes through risk zones
-    for (const [zoneName, zone] of Object.entries(RISK_ZONES)) {
-      // Simplified check: if origin or destination is in affected ports
-      if (zone.affectedPorts.includes(contract.origin) || 
-          zone.affectedPorts.includes(contract.destination)) {
-        return zone.name;
-      }
-    }
-
-    return null;
+    if (!voyage.route) return null;
+    return pirateZoneAt(pointAlongRoute(voyage.route, voyage.currentProgress));
   },
 
-  calculateVoyageCosts: (shipId, contractId) => {
+  getRouteOptionsFor: (shipId, contractId) => {
+    const state = get();
+    const ship = state.fleet.find(s => s.id === shipId);
+    const contract = state.contracts.find(c => c.id === contractId);
+    const spec = state.shipSpecs.find(s => s.id === ship?.specId);
+    const origin = state.ports.find(p => p.LOCODE === contract?.origin);
+    const dest = state.ports.find(p => p.LOCODE === contract?.destination);
+    if (!origin || !dest) return [];
+    return getRouteOptions(origin, dest, spec);
+  },
+
+  calculateVoyageCosts: (shipId, contractId, route) => {
     const state = get();
     const ship = state.fleet.find(s => s.id === shipId);
     const contract = state.contracts.find(c => c.id === contractId);
@@ -1501,10 +1445,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return { fuel: 0, port: 0, cargo: 0, maintenance: 0, insurance: 0, total: 0 };
     }
 
-    const days = Math.ceil(contract.distanceNm / shipSpec.speedKt / 24);
+    // Costs follow the sea route; the shortest one unless a route is chosen.
+    const seaRoute = route ?? get().getRouteOptionsFor(shipId, contractId)[0];
+    const distanceNm = seaRoute?.distanceNm ?? contract.distanceNm;
+    const days = Math.ceil(distanceNm / shipSpec.speedKt / 24);
     
-    const fuel = (contract.distanceNm / 100) * shipSpec.fuelBurn100nm * state.fuelPrice;
-    const port = originPort.fees.port + destPort.fees.port;
+    const fuel = (distanceNm / 100) * shipSpec.fuelBurn100nm * state.fuelPrice;
+    const port = originPort.fees.port + destPort.fees.port + (seaRoute?.canalFee ?? 0);
     const cargo = contract.amount * originPort.fees.cargo[contract.cargoType];
     const maintenance = shipSpec.buildCost * COST_FACTORS.maintenanceRate / 365 * days;
     const insurance = shipSpec.buildCost * COST_FACTORS.insuranceRate / 365 * days;

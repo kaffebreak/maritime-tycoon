@@ -13,6 +13,7 @@ import { Wrench, AlertTriangle } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
 import { ShipInstance, CargoContract } from '../types/game';
 import { ShipPurchaseModal } from './ShipPurchaseModal';
+import { RouteChoiceModal } from './RouteChoiceModal';
 import { AutoContractModal } from './AutoContractModal';
 
 interface KanbanColumnProps {
@@ -47,9 +48,10 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({ id, title, items }) => {
 };
 
 const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) => {
-  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, assignContract, contracts, setAutoContract, simulationDay, activeVoyages } = useGameStore();
+  const { ports, shipSpecs, formatCurrency, calculateVoyageCosts, fleet, contracts, setAutoContract, simulationDay, activeVoyages } = useGameStore();
   const [showAutoModal, setShowAutoModal] = useState(false);
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [routeShipId, setRouteShipId] = useState<string | null>(null);
 
   const isShip = 'specId' in item;
   
@@ -352,7 +354,7 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
               onClick={() => {
                 const ship = availableShips[0];
                 if (ship && contract.status === 'available') {
-                  assignContract(contract.id, ship.id);
+                  setRouteShipId(ship.id);
                 }
               }}
               className={`w-full px-3 py-2 rounded-md text-sm font-medium transition-colors ${
@@ -376,6 +378,13 @@ const KanbanCard: React.FC<{ item: ShipInstance | CargoContract }> = ({ item }) 
                 </span>
               )}
             </div>
+            {routeShipId && (
+              <RouteChoiceModal
+                shipId={routeShipId}
+                contractId={contract.id}
+                onClose={() => setRouteShipId(null)}
+              />
+            )}
           </div>
         )}
         
@@ -545,7 +554,6 @@ export const KanbanBoard: React.FC = () => {
   const { 
     fleet, 
     contracts, 
-    assignContract, 
     generateContracts,
     activeVoyages,
     ports,
@@ -555,6 +563,7 @@ export const KanbanBoard: React.FC = () => {
   } = useGameStore();
   
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [pendingRoute, setPendingRoute] = useState<{ shipId: string; contractId: string } | null>(null);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [selectedShipType, setSelectedShipType] = useState<string>('all');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
@@ -616,12 +625,12 @@ export const KanbanBoard: React.FC = () => {
     // Handle ship to contract assignment
     if ('specId' in activeItem && over.id.toString().startsWith('contract-')) {
       const contractId = over.id.toString().replace('contract-', '');
-      assignContract(contractId, activeItem.id);
+      setPendingRoute({ shipId: activeItem.id, contractId });
     }
     // Handle contract to ship assignment  
     else if ('cargoType' in activeItem && over.id.toString().startsWith('ship-')) {
       const shipId = over.id.toString().replace('ship-', '');
-      assignContract(activeItem.id, shipId);
+      setPendingRoute({ shipId, contractId: activeItem.id });
     }
 
     setActiveId(null);
@@ -763,6 +772,10 @@ export const KanbanBoard: React.FC = () => {
 
       {showPurchaseModal && (
         <ShipPurchaseModal onClose={() => setShowPurchaseModal(false)} />
+      )}
+
+      {pendingRoute && (
+        <RouteChoiceModal {...pendingRoute} onClose={() => setPendingRoute(null)} />
       )}
     </div>
   );
