@@ -1,6 +1,7 @@
 import React from 'react';
-import { Anchor, Play, Pause, FastForward, Calendar, DollarSign } from 'lucide-react';
+import { Anchor, Play, Pause, FastForward, Calendar, DollarSign, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useGameStore } from '../store/gameStore';
+import { BANKRUPTCY_GRACE_DAYS, SCENARIOS, scenarioTarget } from '../constants/scenarios';
 
 export const GameHeader: React.FC = () => {
   const { 
@@ -11,8 +12,17 @@ export const GameHeader: React.FC = () => {
     founderName,
     setGameSpeed, 
     formatCurrency,
-    globalEvents 
+    globalEvents,
+    getCompanyValue,
+    scenarioId,
+    startValue,
+    cashNegativeSince,
   } = useGameStore();
+  const companyValue = getCompanyValue();
+  const scenario = SCENARIOS.find(s => s.id === scenarioId);
+  const target = scenarioTarget(scenario, startValue);
+  const daysLeft = scenario?.years ? Math.max(0, scenario.years * 365 - simulationDay) : undefined;
+  const graceLeft = cashNegativeSince !== undefined ? BANKRUPTCY_GRACE_DAYS - (simulationDay - cashNegativeSince) : undefined;
 
   const speedOptions = [
     { value: 0 as const, label: '一時停止', icon: Pause },
@@ -47,9 +57,28 @@ export const GameHeader: React.FC = () => {
               <DollarSign className="text-green-400" size={20} />
               <div>
                 <div className="text-sm text-slate-300">資金</div>
-                <div className="text-lg font-bold text-green-400">
+                <div className={`text-lg font-bold ${cash < 0 ? 'text-red-400' : 'text-green-400'}`}>
                   {formatCurrency(cash)}
                 </div>
+              </div>
+            </div>
+
+            {/* Company value against the scenario goal */}
+            <div className="flex items-center gap-2" title="現金＋船の時価＋造船所への支払済み額−借入残高">
+              <TrendingUp className="text-amber-400" size={20} />
+              <div>
+                <div className="text-sm text-slate-300">
+                  企業価値{target ? ` / 目標 ${formatCurrency(target)}` : ''}
+                </div>
+                <div className="text-lg font-bold text-amber-300">{formatCurrency(companyValue)}</div>
+                {target && (
+                  <div className="w-full h-1 bg-slate-700 rounded mt-1">
+                    <div
+                      className="h-1 bg-amber-400 rounded"
+                      style={{ width: `${Math.min(100, Math.max(0, (companyValue / target) * 100))}%` }}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -61,6 +90,11 @@ export const GameHeader: React.FC = () => {
                 <div className="text-lg font-bold">
                   {gameDate.toLocaleDateString('ja-JP')}
                 </div>
+                {daysLeft !== undefined && (
+                  <div className="text-xs text-slate-300">
+                    期限まで{daysLeft >= 365 ? `${(daysLeft / 365).toFixed(1)}年` : `${daysLeft}日`}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -90,6 +124,15 @@ export const GameHeader: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {graceLeft !== undefined && (
+          <div className="mt-4 flex items-center gap-2 bg-red-600 bg-opacity-30 border border-red-400 rounded-lg px-3 py-2 text-sm">
+            <AlertTriangle size={16} className="text-red-300" />
+            <span>
+              資金がマイナスです。あと{Math.max(0, graceLeft)}日のうちにプラスに戻さないと倒産します。船を売る・貸し出すなどで現金を作りましょう。
+            </span>
+          </div>
+        )}
 
         {/* Global Events */}
         {globalEvents.length > 0 && (
