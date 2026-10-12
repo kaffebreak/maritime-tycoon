@@ -35,12 +35,12 @@ interface GameStore extends GameState {
   
   // Contract management
   generateContracts: () => void;
-  assignContract: (contractId: string, shipId: string, routeId?: string) => void;
+  assignContract: (contractId: string, shipId: string, route?: RouteOption) => void;
   setAutoContract: (shipId: string, enabled: boolean, settings?: any) => void;
   processAutoContracts: () => void;
   
   // Voyage management
-  startVoyage: (shipId: string, contractId: string, routeId?: string) => void;
+  startVoyage: (shipId: string, contractId: string, route?: RouteOption) => void;
   updateVoyages: () => void;
   
   // Event system
@@ -478,7 +478,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     });
   },
 
-  assignContract: (contractId, shipId, routeId) => {
+  assignContract: (contractId, shipId, route) => {
     const state = get();
     const contract = state.contracts.find(c => c.id === contractId);
     const ship = state.fleet.find(s => s.id === shipId);
@@ -498,10 +498,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
     }));
 
     // Start voyage after assignment
-    setTimeout(() => get().startVoyage(shipId, contractId, routeId), 100);
+    setTimeout(() => get().startVoyage(shipId, contractId, route), 100);
   },
 
-  startVoyage: (shipId, contractId, routeId) => {
+  startVoyage: (shipId, contractId, chosenRoute) => {
     const state = get();
     const ship = state.fleet.find(s => s.id === shipId);
     const contract = state.contracts.find(c => c.id === contractId);
@@ -509,8 +509,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     if (!ship || !contract || !shipSpec) return;
 
-    const routes = get().getRouteOptionsFor(shipId, contractId);
-    const route = routes.find(r => r.id === routeId) ?? routes[0];
+    const route = chosenRoute ?? get().getRouteOptionsFor(shipId, contractId)[0];
     const distanceNm = route?.distanceNm ?? contract.distanceNm;
     const estimatedDays = Math.ceil(distanceNm / shipSpec.speedKt / 24);
     const costs = get().calculateVoyageCosts(shipId, contractId, route);

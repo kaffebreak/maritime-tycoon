@@ -1,7 +1,6 @@
-import { geoInterpolate } from 'd3-geo';
 import { v4 as uuidv4 } from 'uuid';
 import { SeasonType, Storm, StormKind } from '../types/game';
-import { LonLat, nmBetween } from './seaRoutes';
+import { LonLat, nmBetween, sampleRoute } from './seaRoutes';
 
 interface StormKindInfo {
   label: string;
@@ -114,16 +113,7 @@ export const stormAt = (storms: Storm[], point: LonLat): Storm | undefined =>
     .sort((a, b) => STORM_KINDS[a.kind].speedFactor - STORM_KINDS[b.kind].speedFactor)[0];
 
 // Storms that currently sit across any part of a route.
-export const stormsOnRoute = (storms: Storm[], points: LonLat[]): Storm[] =>
-  storms.filter(s => {
-    // Sample each leg so long ocean crossings are checked along their length.
-    for (let i = 1; i < points.length; i++) {
-      const steps = Math.max(1, Math.ceil(nmBetween(points[i - 1], points[i]) / 150));
-      const along = geoInterpolate(points[i - 1], points[i]);
-      for (let k = 0; k <= steps; k++) {
-        const p = along(k / steps) as LonLat;
-        if (nmBetween(p, [s.lon, s.lat]) < s.radiusNm) return true;
-      }
-    }
-    return false;
-  });
+export const stormsOnRoute = (storms: Storm[], points: LonLat[]): Storm[] => {
+  const samples = sampleRoute(points, 150);
+  return storms.filter(s => samples.some(({ point }) => nmBetween(point, [s.lon, s.lat]) < s.radiusNm));
+};

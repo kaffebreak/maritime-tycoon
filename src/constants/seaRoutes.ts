@@ -1,6 +1,7 @@
 import { geoDistance, geoInterpolate } from 'd3-geo';
 import { Port, ShipSpec } from '../types/game';
 import { RISK_ZONES } from './gameData';
+import { isInland } from './land';
 
 // [lon, lat]
 export type LonLat = [number, number];
@@ -11,6 +12,7 @@ const EARTH_RADIUS_NM = 3440.065;
 const WAYPOINTS: Record<string, LonLat> = {
   TOKYO_BAY: [139.75, 35.0],
   TOKYO_OFF: [140.2, 34.5],
+  JAPAN_E: [142.5, 35.0],
   KYUSHU_S: [129.8, 30.0],
   ECS: [123.0, 30.6],
   TAIWAN_STRAIT: [119.8, 24.0],
@@ -33,7 +35,11 @@ const WAYPOINTS: Record<string, LonLat> = {
   SUEZ: [32.5, 29.9],
   PORT_SAID: [32.3, 31.6],
   CRETE_S: [25.0, 34.0],
-  SICILY: [12.0, 36.8],
+  MALTA_S: [14.5, 35.3],
+  SICILY_CHANNEL: [11.7, 37.4],
+  SARDINIA_S: [8.5, 38.0],
+  BALEARIC_S: [2.0, 37.6],
+  ALBORAN: [-3.0, 36.2],
   GIBRALTAR: [-5.6, 35.95],
   CAPE_ST_VINCENT: [-9.5, 36.8],
   FINISTERRE: [-10.0, 43.5],
@@ -55,15 +61,19 @@ const WAYPOINTS: Record<string, LonLat> = {
   BRAZIL_E: [-30.0, -6.0],
   BRAZIL_S: [-42.0, -26.0],
   ARGENTINA: [-60.0, -45.0],
-  CAPE_HORN: [-67.0, -57.5],
+  CAPE_HORN: [-67.0, -58.0],
+  HORN_W: [-75.0, -56.5],
+  CHILE_S: [-78.5, -52.0],
   CHILE: [-78.0, -40.0],
   PERU: [-84.0, -10.0],
   WINDWARD: [-73.8, 20.2],
   CARIB: [-77.0, 13.0],
   COLON: [-79.9, 9.4],
   BALBOA: [-79.5, 8.8],
-  PANAMA_PAC: [-80.0, 7.0],
+  PANAMA_PAC: [-79.5, 6.5],
+  COSTA_RICA: [-85.5, 8.0],
   MEXICO_S: [-95.0, 14.0],
+  MEXICO_W: [-105.5, 17.0],
   CABO: [-110.0, 21.5],
   BAJA: [-118.0, 30.0],
   LAX_OFF: [-118.6, 33.4],
@@ -72,7 +82,8 @@ const WAYPOINTS: Record<string, LonLat> = {
 const LANES: [string, string][] = [
   ['TOKYO_BAY', 'TOKYO_OFF'],
   ['TOKYO_OFF', 'KYUSHU_S'],
-  ['TOKYO_OFF', 'LAX_OFF'],
+  ['TOKYO_OFF', 'JAPAN_E'],
+  ['JAPAN_E', 'LAX_OFF'],
   ['KYUSHU_S', 'ECS'],
   ['ECS', 'TAIWAN_STRAIT'],
   ['TAIWAN_STRAIT', 'SCS_N'],
@@ -98,8 +109,12 @@ const LANES: [string, string][] = [
   ['RED_N', 'SUEZ'],
   ['SUEZ', 'PORT_SAID'],
   ['PORT_SAID', 'CRETE_S'],
-  ['CRETE_S', 'SICILY'],
-  ['SICILY', 'GIBRALTAR'],
+  ['CRETE_S', 'MALTA_S'],
+  ['MALTA_S', 'SICILY_CHANNEL'],
+  ['SICILY_CHANNEL', 'SARDINIA_S'],
+  ['SARDINIA_S', 'BALEARIC_S'],
+  ['BALEARIC_S', 'ALBORAN'],
+  ['ALBORAN', 'GIBRALTAR'],
   ['GIBRALTAR', 'CAPE_ST_VINCENT'],
   ['CAPE_ST_VINCENT', 'FINISTERRE'],
   ['CAPE_ST_VINCENT', 'AZORES'],
@@ -120,10 +135,12 @@ const LANES: [string, string][] = [
   ['BRAZIL_E', 'BRAZIL_S'],
   ['BRAZIL_S', 'ARGENTINA'],
   ['ARGENTINA', 'CAPE_HORN'],
-  ['CAPE_HORN', 'CHILE'],
+  ['CAPE_HORN', 'HORN_W'],
+  ['HORN_W', 'CHILE_S'],
+  ['CHILE_S', 'CHILE'],
   ['CHILE', 'PERU'],
   ['PERU', 'PANAMA_PAC'],
-  ['PERU', 'MEXICO_S'],
+  ['PERU', 'COSTA_RICA'],
   ['ANTILLES', 'BAHAMAS_E'],
   ['GRAND_BANKS', 'NY_OFF'],
   ['AZORES', 'NY_OFF'],
@@ -135,8 +152,10 @@ const LANES: [string, string][] = [
   ['CARIB', 'COLON'],
   ['COLON', 'BALBOA'],
   ['BALBOA', 'PANAMA_PAC'],
-  ['PANAMA_PAC', 'MEXICO_S'],
-  ['MEXICO_S', 'CABO'],
+  ['PANAMA_PAC', 'COSTA_RICA'],
+  ['COSTA_RICA', 'MEXICO_S'],
+  ['MEXICO_S', 'MEXICO_W'],
+  ['MEXICO_W', 'CABO'],
   ['CABO', 'BAJA'],
   ['BAJA', 'LAX_OFF'],
 ];
@@ -154,10 +173,27 @@ const PORT_ACCESS: Record<string, string> = {
 // Ships heavier than this do not fit the Panama Canal locks.
 export const PANAMA_MAX_DWT = 120_000;
 
+// `zone` is the stretch the coarse land map draws as solid land, so a
+// hand-drawn route may cross it (and pays the toll for doing so).
 const CANALS = {
-  suez: { node: 'SUEZ', name: 'スエズ運河', baseFee: 50_000, feePerDwt: 2 },
-  panama: { node: 'COLON', name: 'パナマ運河', baseFee: 40_000, feePerDwt: 2.5 },
+  suez: {
+    node: 'SUEZ', name: 'スエズ運河', baseFee: 50_000, feePerDwt: 2,
+    zone: { center: [32.8, 29.5] as LonLat, radiusNm: 180 },
+  },
+  panama: {
+    node: 'COLON', name: 'パナマ運河', baseFee: 40_000, feePerDwt: 2.5,
+    zone: { center: [-79.7, 9.1] as LonLat, radiusNm: 50 },
+  },
 } as const;
+
+// Narrow straits the coarse land map closes up.
+const STRAIT_ZONES: { center: LonLat; radiusNm: number }[] = [
+  { center: [43.4, 12.6], radiusNm: 60 }, // Bab-el-Mandeb
+  { center: [105.8, -5.9], radiusNm: 30 }, // Sunda Strait
+];
+
+// Ports sit inland on the coarse map; ships may cross land this close to them.
+const PORT_CLEARANCE_NM = 100;
 type CanalId = keyof typeof CANALS;
 
 // Landmarks that name a route, in the order they are checked.
@@ -210,6 +246,17 @@ const shortestPath = (start: string, goal: string, blocked: Set<string>): string
   return path;
 };
 
+// Points every `stepNm` along a route, following its great-circle legs.
+export const sampleRoute = (points: LonLat[], stepNm = 50): { point: LonLat; leg: number }[] => {
+  const samples: { point: LonLat; leg: number }[] = [];
+  for (let i = 1; i < points.length; i++) {
+    const steps = Math.max(1, Math.ceil(nmBetween(points[i - 1], points[i]) / stepNm));
+    const along = geoInterpolate(points[i - 1], points[i]);
+    for (let k = 0; k <= steps; k++) samples.push({ point: along(k / steps) as LonLat, leg: i - 1 });
+  }
+  return samples;
+};
+
 const routeLength = (points: LonLat[]) =>
   points.slice(1).reduce((sum, p, i) => sum + nmBetween(points[i], p), 0);
 
@@ -236,13 +283,15 @@ const routeLabel = (path: string[]) => {
 };
 
 // The pirate zones a route passes through, by name.
-export const pirateZonesOnRoute = (points: LonLat[]): string[] =>
-  Object.values(RISK_ZONES)
+export const pirateZonesOnRoute = (points: LonLat[]): string[] => {
+  const samples = sampleRoute(points);
+  return Object.values(RISK_ZONES)
     .filter(zone => {
       const center: LonLat = [zone.coordinates.lon, zone.coordinates.lat];
-      return points.some(p => nmBetween(p, center) < PIRACY_RADIUS_NM);
+      return samples.some(({ point }) => nmBetween(point, center) < PIRACY_RADIUS_NM);
     })
     .map(zone => zone.name);
+};
 
 // The pirate zone a ship at `point` is in, if any.
 export const pirateZoneAt = (point: LonLat): string | null =>
@@ -283,15 +332,59 @@ export const getRouteOptions = (from: Port, to: Port, spec?: ShipSpec): RouteOpt
       label: routeLabel(path),
       points,
       distanceNm: Math.round(routeLength(points)),
-      canalFee: canals.reduce(
-        (sum, id) => sum + CANALS[id].baseFee + CANALS[id].feePerDwt * (spec?.dwtOrGt ?? 0),
-        0,
-      ),
+      canalFee: canalFeeFor(canals, spec),
       canals: canals.map(id => CANALS[id].name),
       pirateZones: pirateZonesOnRoute(points),
     });
   }
   return options.sort((a, b) => a.distanceNm - b.distanceNm);
+};
+
+const canalFeeFor = (canals: CanalId[], spec?: ShipSpec) =>
+  canals.reduce((sum, id) => sum + CANALS[id].baseFee + CANALS[id].feePerDwt * (spec?.dwtOrGt ?? 0), 0);
+
+export interface CustomRouteCheck {
+  route: RouteOption;
+  // Legs (index from the origin port) that run over land.
+  landLegs: number[];
+  // The ship is too large for the Panama Canal this route goes through.
+  tooBigForPanama: boolean;
+}
+
+// A route the player draws by clicking waypoints between two ports.
+export const buildCustomRoute = (from: Port, to: Port, via: LonLat[], spec?: ShipSpec): CustomRouteCheck => {
+  const fromPoint: LonLat = [from.lon, from.lat];
+  const toPoint: LonLat = [to.lon, to.lat];
+  const points: LonLat[] = [fromPoint, ...via, toPoint];
+  const samples = sampleRoute(points, 25);
+
+  const inZone = (point: LonLat, zone: { center: LonLat; radiusNm: number }) =>
+    nmBetween(point, zone.center) < zone.radiusNm;
+  const canals = (Object.keys(CANALS) as CanalId[]).filter(id =>
+    samples.some(({ point }) => inZone(point, CANALS[id].zone)),
+  );
+
+  const landLegs = new Set<number>();
+  for (const { point, leg } of samples) {
+    if (nmBetween(point, fromPoint) < PORT_CLEARANCE_NM || nmBetween(point, toPoint) < PORT_CLEARANCE_NM) continue;
+    if (canals.some(id => inZone(point, CANALS[id].zone))) continue;
+    if (STRAIT_ZONES.some(zone => inZone(point, zone))) continue;
+    if (isInland(point)) landLegs.add(leg);
+  }
+
+  return {
+    route: {
+      id: `custom:${via.map(p => p.map(v => v.toFixed(1)).join(',')).join(';')}`,
+      label: '自分で描いた航路',
+      points,
+      distanceNm: Math.round(routeLength(points)),
+      canalFee: canalFeeFor(canals, spec),
+      canals: canals.map(id => CANALS[id].name),
+      pirateZones: pirateZonesOnRoute(points),
+    },
+    landLegs: [...landLegs].sort((a, b) => a - b),
+    tooBigForPanama: canals.includes('panama') && (spec?.dwtOrGt ?? 0) > PANAMA_MAX_DWT,
+  };
 };
 
 // Locate `progress` (0-1) along a route, measured by distance sailed:
