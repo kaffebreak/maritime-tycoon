@@ -1,3 +1,5 @@
+import type { FreightMarket } from '../constants/freightMarket';
+
 export type CargoType = 'Container' | 'Car' | 'Bulk' | 'Oil' | 'Passenger';
 export type ShipClass = 'Container' | 'PCTC' | 'Tanker' | 'Bulker' | 'Cruise';
 export type PortSize = 'Large' | 'Medium' | 'Small';
@@ -344,6 +346,7 @@ export interface GameState {
   achievements: Achievement[];
   finances: CompanyFinances;
   reputation: number; // 0-100
+  freightMarket: FreightMarket;
   
   // NPC and Competition
   npcCompanies: NPCCompany[];
