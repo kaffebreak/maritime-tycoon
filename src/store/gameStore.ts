@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { GameState, CargoContract, ShipInstance, Voyage, VoyageCosts, VoyageEvent, Port, ShipSpec } from '../types/game';
+import { GameState, CargoContract, CargoType, ShipInstance, Voyage, VoyageCosts, VoyageEvent, Port, ShipSpec } from '../types/game';
 import { 
   INITIAL_CASH, 
   SAMPLE_PORTS, 
@@ -18,6 +18,10 @@ import {
   DIFFICULTY_EVENT_MODIFIERS,
   RANDOM_EVENTS,
   dailyOperatingCost,
+  CARGO_LOTS,
+  HANDLING_PAID_BY_OWNER,
+  LOT_SIZE_PREMIUM,
+  PORT_DAYS,
 } from '../constants/gameData';
 import { v4 as uuidv4 } from 'uuid';
 import { getRouteOptions, pirateZoneAt, pointAlongRoute, RouteOption } from '../constants/seaRoutes';
@@ -32,6 +36,15 @@ import {
   shipPrice,
   stepMarket,
 } from '../constants/freightMarket';
+import {
+  generateCharterOffers,
+  generateSecondhandOffers,
+  NEWBUILD_DAYS,
+  NEWBUILD_DEPOSIT,
+  SHIPYARD_PORT,
+  charterHire,
+  shipValue,
+} from '../constants/shipMarket';
 
 // Voyage costs plus how long the whole trip takes, empty leg included.
 export interface VoyageEstimate extends VoyageCosts {
@@ -49,7 +62,12 @@ interface GameStore extends GameState {
   maintainContractPool: () => void;
   
   // Ship management
-  purchaseShip: (specId: string, name: string) => void;
+  orderNewbuild: (specId: string, name: string) => void;
+  buySecondhand: (offerId: string, name: string) => void;
+  sellShip: (shipId: string) => void;
+  charterIn: (offerId: string, name: string) => void;
+  charterOut: (shipId: string, days: number) => void;
+  updateShipMarket: () => void;
   
   // Contract management
   generateContracts: () => void;
@@ -79,49 +97,91 @@ interface GameStore extends GameState {
   chargeOperatingCosts: () => void;
 }
 
+// News is kept newest first.
+const NEWS_KEPT = 50;
+const prependNews = (news: GameState['marketNews'], items: GameState['marketNews']) =>
+  [...items, ...news].slice(0, NEWS_KEPT);
+
+const CREW_NAMES = ['Sato', 'Reyes', 'Novak', 'Okafor', 'Lindqvist', 'Tan', 'Silva', 'Kowalski'];
+
+const crewMember = (role: 'navigation' | 'engineering' | 'general', salary: number) => ({
+  id: uuidv4(),
+  name: CREW_NAMES[Math.floor(Math.random() * CREW_NAMES.length)],
+  skill: 50 + Math.floor(Math.random() * 40),
+  salary,
+  experience: 2 + Math.floor(Math.random() * 20),
+  specialization: role,
+});
+
+// A ship ready to trade, at a port, built on builtDay.
+const makeShip = (spec: ShipSpec, name: string, port: string, builtDay: number, day: number): ShipInstance => ({
+  id: uuidv4(),
+  specId: spec.id,
+  name,
+  status: 'idle',
+  currentPort: port,
+  builtDay,
+  etaDay: 0,
+  hp: 100,
+  ageYear: Math.floor((day - builtDay) / 365),
+  maintenanceCost: 0,
+  insuranceCost: 0,
+  condition: Math.max(40, Math.round(100 - ((day - builtDay) / 365) * 2.5)),
+  lastMaintenance: day,
+  totalDistance: 0,
+  maintenanceStatus: 'none',
+  maintenanceHistory: [],
+  crew: {
+    captain: crewMember('navigation', 300),
+    engineers: Array.from({ length: 4 }, () => crewMember('engineering', 200)),
+    sailors: Array.from({ length: 16 }, () => crewMember('general', 150)),
+  },
+  autoContract: false,
+  autoSettings: {
+    minProfitMargin: 15,
+    maxDistance: 15000,
+    preferredCargoTypes: [
+      spec.class === 'Container' ? 'Container' :
+      spec.class === 'PCTC' ? 'Car' :
+      spec.class === 'Tanker' ? 'Oil' :
+      spec.class === 'Bulker' ? 'Bulk' : 'Passenger',
+    ],
+    riskTolerance: 'medium',
+  },
+});
+
+// Share of new cargo offers by trade.
+const CARGO_WEIGHTS: [CargoType, number][] = [
+  ['Bulk', 0.3],
+  ['Oil', 0.25],
+  ['Container', 0.3],
+  ['Car', 0.15],
+];
+
+const pick = <T,>(items: T[]): T => items[Math.floor(Math.random() * items.length)];
+
 const generateRandomContract = (ports: Port[], market: FreightMarket): CargoContract => {
-  const origin = ports[Math.floor(Math.random() * ports.length)];
-  const destination = ports[Math.floor(Math.random() * ports.length)];
-  
-  if (origin.LOCODE === destination.LOCODE) {
-    return generateRandomContract(ports, market);
-  }
+  let roll = Math.random();
+  const cargoType = (CARGO_WEIGHTS.find(([, w]) => (roll -= w) < 0) ?? CARGO_WEIGHTS[0])[0];
+  const ships = (p: Port) => (p.exports ?? p.supportedCargo).includes(cargoType);
+  const takes = (p: Port) => (p.imports ?? p.supportedCargo).includes(cargoType);
 
-  const supportedCargo = origin.supportedCargo.filter(cargo => 
-    destination.supportedCargo.includes(cargo)
-  );
-  
-  if (supportedCargo.length === 0) {
-    return generateRandomContract(ports, market);
-  }
+  const origin = pick(ports.filter(ships));
+  const destination = pick(ports.filter(p => takes(p) && p.LOCODE !== origin?.LOCODE));
+  if (!origin || !destination) return generateRandomContract(ports, market);
 
-  const cargoType = supportedCargo[Math.floor(Math.random() * supportedCargo.length)];
-  const distance = calculateDistance(origin, destination);
-  
-  // Generate realistic cargo amounts based on type
-  let amount: number;
-  switch (cargoType) {
-    case 'Container':
-      amount = Math.floor(Math.random() * 5000) + 500; // 500-5500 TEU
-      break;
-    case 'Car':
-      amount = Math.floor(Math.random() * 2000) + 200; // 200-2200 CEU
-      break;
-    case 'Bulk':
-    case 'Oil':
-      amount = Math.floor(Math.random() * 50000) + 10000; // 10k-60k tonnes
-      break;
-    case 'Passenger':
-      amount = Math.floor(Math.random() * 1000) + 100; // 100-1100 PAX
-      break;
-    default:
-      amount = 1000;
-  }
+  // Freight is quoted on the shortest sea route.
+  const distance = getRouteOptions(origin, destination)[0]?.distanceNm ?? calculateDistance(origin, destination);
+  const amount = Math.round(pick(CARGO_LOTS[cargoType]) * (0.9 + Math.random() * 0.2));
 
-  const baseRate = FREIGHT_RATES[cargoType];
-  const distanceMultiplier = Math.max(0.5, Math.min(2.0, distance / 5000));
+  const { base, per1000nm } = FREIGHT_RATES[cargoType];
+  const lotPremium = Math.pow(Math.max(...CARGO_LOTS[cargoType]) / amount, LOT_SIZE_PREMIUM[cargoType]);
   // The rate is fixed when the contract is offered, at today's market.
-  const freightRate = baseRate * distanceMultiplier * rateIndexFor(market, cargoType) * (0.8 + Math.random() * 0.4);
+  const freightRate =
+    (base + (per1000nm * distance) / 1000) *
+    lotPremium *
+    rateIndexFor(market, cargoType) *
+    (0.85 + Math.random() * 0.3);
 
   // 30% chance for long-term contract
   const isLongTerm = Math.random() < 0.3;
@@ -246,6 +306,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
   marketNews: [],
   reputation: 50,
   freightMarket: createFreightMarket(0),
+  secondhandOffers: [],
+  charterOffers: [],
+  newbuildOrders: [],
 
   initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard') => {
     const difficultySettings = {
@@ -256,25 +319,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
     
     const initialCash = difficulty ? difficultySettings[difficulty] : INITIAL_CASH;
     
-    const starterShip: ShipInstance = {
-      id: uuidv4(),
-      specId: 'FEEDER-1',
-      name: 'Ocean Pioneer',
-      status: 'idle',
-      currentPort: 'JPTYO',
-      etaDay: 0,
-      hp: 100,
-      ageYear: 0,
-      maintenanceCost: 0,
-      insuranceCost: 0,
-      autoContract: false,
-      autoSettings: {
-        minProfitMargin: 15,
-        maxDistance: 10000,
-        preferredCargoTypes: ['Container'],
-        riskTolerance: 'medium',
-      },
-    };
+    // A secondhand Handysize bulker, eight years old.
+    const starterShip = makeShip(SAMPLE_SHIP_SPECS.find(s => s.id === 'BULK-HANDY')!, 'Ocean Pioneer', 'SGSIN', -8 * 365, 0);
 
     const freightMarket = createFreightMarket(0);
     const initialContracts = Array.from({ length: 12 }, () => {
@@ -288,6 +334,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       companyName: companyName || '',
       founderName: founderName || '',
       fleet: [starterShip],
+      secondhandOffers: generateSecondhandOffers(SAMPLE_SHIP_SPECS, SAMPLE_PORTS, freightMarket, 0, uuidv4),
+      charterOffers: generateCharterOffers(SAMPLE_SHIP_SPECS, SAMPLE_PORTS, freightMarket, 0, uuidv4),
+      newbuildOrders: [],
       contracts: initialContracts,
       npcCompanies: [],
       rankings: [],
@@ -328,6 +377,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().triggerEconomicCycles();
     get().triggerGlobalEvents();
     get().updateFreightMarket();
+    get().updateShipMarket();
     get().simulateMarketCompetition();
     get().simulateNPCActions();
     get().updateRankings();
@@ -338,38 +388,150 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().triggerDetailedRandomEvents();
   },
 
-  purchaseShip: (specId, name) => {
+  // Order a ship from the yard: a deposit now, the rest on delivery.
+  orderNewbuild: (specId, name) => {
     const state = get();
     const spec = state.shipSpecs.find(s => s.id === specId);
-    const price = spec && shipPrice(state.freightMarket, spec);
-    if (!spec || !price || state.cash < price) return;
+    if (!spec) return;
+    const price = shipPrice(state.freightMarket, spec);
+    const deposit = Math.round(price * NEWBUILD_DEPOSIT);
+    if (state.cash < deposit) return;
+    set(prev => ({
+      cash: prev.cash - deposit,
+      totalCosts: prev.totalCosts,
+      newbuildOrders: [
+        ...prev.newbuildOrders,
+        {
+          id: uuidv4(),
+          specId,
+          name,
+          orderDay: state.simulationDay,
+          deliveryDay: state.simulationDay + NEWBUILD_DAYS,
+          price,
+          paid: deposit,
+        },
+      ],
+    }));
+  },
 
-    const newShip: ShipInstance = {
-      id: uuidv4(),
-      specId,
-      name,
-      status: 'idle',
-      currentPort: 'JPTYO', // Default starting port
-      etaDay: 0,
-      hp: 100,
-      ageYear: 0,
-      maintenanceCost: 0,
-      insuranceCost: 0,
-      autoContract: false,
-      autoSettings: {
-        minProfitMargin: 15,
-        maxDistance: 10000,
-        preferredCargoTypes: [spec.class === 'Container' ? 'Container' : 
-                             spec.class === 'PCTC' ? 'Car' :
-                             spec.class === 'Tanker' ? 'Oil' :
-                             spec.class === 'Bulker' ? 'Bulk' : 'Passenger'],
-        riskTolerance: 'medium',
-      },
+  buySecondhand: (offerId, name) => {
+    const state = get();
+    const offer = state.secondhandOffers.find(o => o.id === offerId);
+    const spec = offer && state.shipSpecs.find(s => s.id === offer.specId);
+    if (!offer || !spec || state.cash < offer.price) return;
+    set(prev => ({
+      cash: prev.cash - offer.price,
+      fleet: [...prev.fleet, makeShip(spec, name, offer.port, offer.builtDay, state.simulationDay)],
+      secondhandOffers: prev.secondhandOffers.filter(o => o.id !== offerId),
+    }));
+  },
+
+  sellShip: (shipId) => {
+    const state = get();
+    const ship = state.fleet.find(s => s.id === shipId);
+    const spec = ship && state.shipSpecs.find(s => s.id === ship.specId);
+    if (!ship || !spec || ship.status !== 'idle' || ship.charter) return;
+    const value = shipValue(state.freightMarket, spec, ship.builtDay, state.simulationDay);
+    set(prev => ({
+      cash: prev.cash + value,
+      fleet: prev.fleet.filter(s => s.id !== shipId),
+      marketNews: prependNews(prev.marketNews, [
+        {
+          id: `news-${uuidv4()}`,
+          type: 'company_expansion' as const,
+          companyId: 'player',
+          message: `${ship.name}を${prev.formatCurrency(value)}で売却しました`,
+          day: state.simulationDay,
+          impact: 'neutral' as const,
+        },
+      ]),
+    }));
+  },
+
+  charterIn: (offerId, name) => {
+    const state = get();
+    const offer = state.charterOffers.find(o => o.id === offerId);
+    const spec = offer && state.shipSpecs.find(s => s.id === offer.specId);
+    if (!offer || !spec) return;
+    const ship: ShipInstance = {
+      ...makeShip(spec, name, offer.port, offer.builtDay, state.simulationDay),
+      charter: { kind: 'in', dailyHire: offer.dailyHire, endDay: state.simulationDay + offer.days },
     };
+    set(prev => ({
+      fleet: [...prev.fleet, ship],
+      charterOffers: prev.charterOffers.filter(o => o.id !== offerId),
+    }));
+  },
 
-    set(prevState => ({
-      cash: prevState.cash - price,
-      fleet: [...prevState.fleet, newShip],
+  charterOut: (shipId, days) => {
+    const state = get();
+    const ship = state.fleet.find(s => s.id === shipId);
+    const spec = ship && state.shipSpecs.find(s => s.id === ship.specId);
+    if (!ship || !spec || ship.status !== 'idle' || ship.charter) return;
+    const dailyHire = charterHire(state.freightMarket, spec);
+    set(prev => ({
+      fleet: prev.fleet.map(s =>
+        s.id === shipId
+          ? { ...s, status: 'chartered_out' as const, charter: { kind: 'out' as const, dailyHire, endDay: state.simulationDay + days } }
+          : s,
+      ),
+    }));
+  },
+
+  // Daily: deliver newbuilds, end time charters, refresh the sale and
+  // charter lists once a month.
+  updateShipMarket: () => {
+    const state = get();
+    const day = state.simulationDay;
+    const news: string[] = [];
+
+    const delivered = state.newbuildOrders.filter(o => o.deliveryDay <= day);
+    const newShips = delivered.flatMap(order => {
+      const spec = state.shipSpecs.find(s => s.id === order.specId);
+      if (!spec) return [];
+      news.push(`新造船${order.name}が竣工し、上海の造船所で引き渡されました`);
+      return [makeShip(spec, order.name, SHIPYARD_PORT, day, day)];
+    });
+    const balanceDue = delivered.reduce((sum, o) => sum + (o.price - o.paid), 0);
+
+    const fleet: ShipInstance[] = [];
+    for (const ship of state.fleet) {
+      if (ship.charter && day >= ship.charter.endDay) {
+        if (ship.charter.kind === 'in' && ship.status === 'idle') {
+          news.push(`用船していた${ship.name}を船主に返しました`);
+          continue;
+        }
+        if (ship.charter.kind === 'out') {
+          news.push(`貸し出していた${ship.name}が戻りました`);
+          fleet.push({ ...ship, status: 'idle', charter: undefined });
+          continue;
+        }
+      }
+      fleet.push(ship);
+    }
+
+    const refresh = day % 30 === 0;
+    set(prev => ({
+      fleet: [...fleet, ...newShips],
+      newbuildOrders: prev.newbuildOrders.filter(o => o.deliveryDay > day),
+      cash: prev.cash - balanceDue,
+      secondhandOffers: refresh
+        ? generateSecondhandOffers(prev.shipSpecs, prev.ports, prev.freightMarket, day, uuidv4)
+        : prev.secondhandOffers,
+      charterOffers: refresh
+        ? generateCharterOffers(prev.shipSpecs, prev.ports, prev.freightMarket, day, uuidv4)
+        : prev.charterOffers,
+      marketNews: prependNews(
+        prev.marketNews,
+        news.map(message => ({
+          id: `news-${uuidv4()}`,
+          type: 'company_expansion' as const,
+          companyId: 'player',
+          message,
+          day,
+          impact: 'neutral' as const,
+        })),
+      ),
     }));
   },
 
@@ -453,39 +615,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           const currentCosts = get().calculateVoyageCosts(ship.id, current.id);
           const bestMargin = ((best.amount * best.freightRate - bestCosts.total) / (best.amount * best.freightRate)) * 100;
           const currentMargin = ((current.amount * current.freightRate - currentCosts.total) / (current.amount * current.freightRate)) * 100;
-            
-            // Check for emergency maintenance needs
-            if (ship.condition < 20 && Math.random() < 0.1) {
-              ship.status = 'maintenance';
-              ship.maintenanceStatus = 'scheduled';
-              ship.scheduledMaintenance = {
-                type: 'emergency',
-                scheduledDay: simulationDay,
-                estimatedDays: MAINTENANCE_DURATION.emergency,
-                estimatedCost: shipSpecs.find(s => s.id === ship.specId)?.buildCost * MAINTENANCE_COSTS.emergency || 0,
-              };
-            }
-          
-          // Complete maintenance if due
-          if (ship.status === 'maintenance' && ship.etaDay > 0 && simulationDay >= ship.etaDay) {
-            get().completeMaintenance(ship.id);
-          }
-          
-          // Check for scheduled maintenance needs
-          if (ship.status === 'idle' && ship.maintenanceStatus === 'none') {
-            const daysSinceLastMaintenance = simulationDay - ship.lastMaintenance;
-            
-            if (daysSinceLastMaintenance >= MAINTENANCE_INTERVALS.drydock) {
-              // Auto-schedule drydock maintenance
-              get().scheduleMaintenance(ship.id, 'drydock');
-            } else if (daysSinceLastMaintenance >= MAINTENANCE_INTERVALS.major) {
-              // Auto-schedule major maintenance
-              get().scheduleMaintenance(ship.id, 'major');
-            } else if (daysSinceLastMaintenance >= MAINTENANCE_INTERVALS.minor) {
-              // Auto-schedule minor maintenance
-              get().scheduleMaintenance(ship.id, 'minor');
-            }
-          }
+
           return currentMargin > bestMargin ? current : best;
         });
 
@@ -657,7 +787,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       totalRevenue: state.totalRevenue + revenue,
       completedContracts: state.completedContracts + arrived.length,
       reputation,
-      marketNews: [...state.marketNews, ...news],
+      marketNews: prependNews(state.marketNews, news),
     });
 
     // Ships on auto-contract look for their next job where they arrived.
@@ -680,12 +810,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   chargeOperatingCosts: () => {
     const state = get();
+    // Hired ships cost their hire (the owner runs them); ships we hire out
+    // still cost us their upkeep but earn hire.
     const total = state.fleet.reduce((sum, ship) => {
       const spec = state.shipSpecs.find(s => s.id === ship.specId);
-      return sum + (spec ? dailyOperatingCost(spec) : 0);
+      if (ship.charter?.kind === 'in') return sum + ship.charter.dailyHire;
+      const hireEarned = ship.charter?.kind === 'out' ? ship.charter.dailyHire : 0;
+      return sum + (spec ? dailyOperatingCost(spec) : 0) - hireEarned;
     }, 0);
     if (total === 0) return;
-    set(prev => ({ cash: prev.cash - total, totalCosts: prev.totalCosts + total }));
+    set(prev => ({
+      cash: prev.cash - total,
+      totalCosts: prev.totalCosts + Math.max(0, total),
+      totalRevenue: prev.totalRevenue + Math.max(0, -total),
+    }));
   },
 
   updateContractExpiration: () => {
@@ -888,19 +1026,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set(prev => ({
       freightMarket: after,
-      marketNews: news.length
-        ? [
-            ...prev.marketNews,
-            ...news.map(n => ({
-              id: `news-${uuidv4()}`,
-              type: 'market_entry' as const,
-              companyId: 'global',
-              message: n.text,
-              day,
-              impact: n.up ? ('positive' as const) : ('negative' as const),
-            })),
-          ]
-        : prev.marketNews,
+      marketNews: prependNews(
+        prev.marketNews,
+        news.map(n => ({
+          id: `news-${uuidv4()}`,
+          type: 'market_entry' as const,
+          companyId: 'global',
+          message: n.text,
+          day,
+          impact: n.up ? ('positive' as const) : ('negative' as const),
+        })),
+      ),
     }));
   },
 
@@ -1478,11 +1614,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const ladenNm = seaRoute?.distanceNm ?? contract.distanceNm;
     const distanceNm = ballastNm + ladenNm;
     const toDays = (nm: number) => Math.ceil(nm / shipSpec.speedKt / 24);
-    const days = toDays(distanceNm);
+    // Sea days plus loading and discharging.
+    const days = toDays(distanceNm) + PORT_DAYS * 2;
 
     const fuel = (distanceNm / 100) * shipSpec.fuelBurn100nm * state.fuelPrice;
-    const port = originPort.fees.port + destPort.fees.port + (seaRoute?.canalFee ?? 0) + (ballast?.canalFee ?? 0);
-    const cargo = contract.amount * originPort.fees.cargo[contract.cargoType];
+    // Port dues grow with the ship's size.
+    const sizeFactor = Math.max(1, Math.sqrt(shipSpec.dwtOrGt / 30000));
+    const port =
+      (originPort.fees.port + destPort.fees.port) * sizeFactor + (seaRoute?.canalFee ?? 0) + (ballast?.canalFee ?? 0);
+    const cargo = HANDLING_PAID_BY_OWNER[contract.cargoType]
+      ? contract.amount * (originPort.fees.cargo[contract.cargoType] + destPort.fees.cargo[contract.cargoType]) / 2
+      : 0;
     const opex = dailyOperatingCost(shipSpec) * days;
 
     const total = fuel + port + cargo + opex;
