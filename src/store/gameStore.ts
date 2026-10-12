@@ -22,6 +22,16 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import { getRouteOptions, pirateZoneAt, pointAlongRoute, RouteOption } from '../constants/seaRoutes';
 import { advanceStorms, stormAt, STORM_KINDS } from '../constants/weather';
+import {
+  createFreightMarket,
+  FreightMarket,
+  MARKET_SEGMENTS,
+  MarketSegment,
+  rateIndexFor,
+  SEGMENT_LABEL,
+  shipPrice,
+  stepMarket,
+} from '../constants/freightMarket';
 
 // Voyage costs plus how long the whole trip takes, empty leg included.
 export interface VoyageEstimate extends VoyageCosts {
@@ -55,6 +65,7 @@ interface GameStore extends GameState {
   triggerRandomEvents: () => void;
   triggerWeatherEvents: () => void;
   updateFuelPrices: () => void;
+  updateFreightMarket: () => void;
   triggerEconomicCycles: () => void;
   simulateMarketCompetition: () => void;
   triggerDetailedRandomEvents: () => void;
@@ -68,12 +79,12 @@ interface GameStore extends GameState {
   chargeOperatingCosts: () => void;
 }
 
-const generateRandomContract = (ports: Port[]): CargoContract => {
+const generateRandomContract = (ports: Port[], market: FreightMarket): CargoContract => {
   const origin = ports[Math.floor(Math.random() * ports.length)];
   const destination = ports[Math.floor(Math.random() * ports.length)];
   
   if (origin.LOCODE === destination.LOCODE) {
-    return generateRandomContract(ports);
+    return generateRandomContract(ports, market);
   }
 
   const supportedCargo = origin.supportedCargo.filter(cargo => 
@@ -81,7 +92,7 @@ const generateRandomContract = (ports: Port[]): CargoContract => {
   );
   
   if (supportedCargo.length === 0) {
-    return generateRandomContract(ports);
+    return generateRandomContract(ports, market);
   }
 
   const cargoType = supportedCargo[Math.floor(Math.random() * supportedCargo.length)];
@@ -109,7 +120,8 @@ const generateRandomContract = (ports: Port[]): CargoContract => {
 
   const baseRate = FREIGHT_RATES[cargoType];
   const distanceMultiplier = Math.max(0.5, Math.min(2.0, distance / 5000));
-  const freightRate = baseRate * distanceMultiplier * (0.8 + Math.random() * 0.4);
+  // The rate is fixed when the contract is offered, at today's market.
+  const freightRate = baseRate * distanceMultiplier * rateIndexFor(market, cargoType) * (0.8 + Math.random() * 0.4);
 
   // 30% chance for long-term contract
   const isLongTerm = Math.random() < 0.3;
@@ -233,6 +245,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   rankings: [],
   marketNews: [],
   reputation: 50,
+  freightMarket: createFreightMarket(0),
 
   initializeGame: (companyName?: string, founderName?: string, difficulty?: 'Easy' | 'Normal' | 'Hard') => {
     const difficultySettings = {
@@ -263,8 +276,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
       },
     };
 
+    const freightMarket = createFreightMarket(0);
     const initialContracts = Array.from({ length: 12 }, () => {
-      const contract = generateRandomContract(SAMPLE_PORTS);
+      const contract = generateRandomContract(SAMPLE_PORTS, freightMarket);
       return { ...contract, createdDay: 0 };
     });
     set({
@@ -279,6 +293,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       rankings: [],
       marketNews: [],
       reputation: 50,
+      freightMarket,
       storms: Array.from({ length: 6 }).reduce<GameState['storms']>(
         storms => advanceStorms(storms, get().marketConditions.season).storms,
         [],
@@ -312,7 +327,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     get().updateFuelPrices();
     get().triggerEconomicCycles();
     get().triggerGlobalEvents();
-    get().updateMarketConditions();
+    get().updateFreightMarket();
     get().simulateMarketCompetition();
     get().simulateNPCActions();
     get().updateRankings();
@@ -326,7 +341,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   purchaseShip: (specId, name) => {
     const state = get();
     const spec = state.shipSpecs.find(s => s.id === specId);
-    if (!spec || state.cash < spec.buildCost) return;
+    const price = spec && shipPrice(state.freightMarket, spec);
+    if (!spec || !price || state.cash < price) return;
 
     const newShip: ShipInstance = {
       id: uuidv4(),
@@ -352,7 +368,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     };
 
     set(prevState => ({
-      cash: prevState.cash - spec.buildCost,
+      cash: prevState.cash - price,
       fleet: [...prevState.fleet, newShip],
     }));
   },
@@ -360,7 +376,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   generateContracts: () => {
     const state = get();
     const newContracts = Array.from({ length: 6 }, () => {
-      const contract = generateRandomContract(state.ports);
+      const contract = generateRandomContract(state.ports, state.freightMarket);
       return { ...contract, createdDay: state.simulationDay };
     });
     
@@ -699,7 +715,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (availableContracts.length < minCount) {
       const contractsToGenerate = targetCount - availableContracts.length;
       const newContracts = Array.from({ length: contractsToGenerate }, () => {
-        const contract = generateRandomContract(state.ports);
+        const contract = generateRandomContract(state.ports, state.freightMarket);
         return { ...contract, createdDay: state.simulationDay };
       });
       
@@ -799,56 +815,100 @@ export const useGameStore = create<GameStore>((set, get) => ({
   updateFuelPrices: () => {
     const state = get();
     const factors = FUEL_PRICE_FACTORS;
-    
-    // Base volatility
-    let priceChange = (Math.random() - 0.5) * factors.baseVolatility * 2;
-    
-    // Seasonal effects
-    const seasonalMultiplier = factors.seasonalMultipliers[state.marketConditions.season];
-    priceChange *= seasonalMultiplier;
-    
-    // Geopolitical tension effects
-    const tensionEffect = state.marketConditions.geopoliticalTension * factors.geopoliticalMultiplier;
-    priceChange += tensionEffect;
-    
-    // Global events effects
-    let eventMultiplier = 1.0;
-    state.newGlobalEvents.forEach(event => {
-      if (event.effects.fuelPriceMultiplier && 
-          state.simulationDay >= event.startDay && 
-          state.simulationDay < event.startDay + event.duration) {
-        eventMultiplier *= event.effects.fuelPriceMultiplier;
-      }
-    });
-    
-    // Apply changes
-    const newVLSFO = Math.max(400, state.marketConditions.fuelPrices.VLSFO * (1 + priceChange) * eventMultiplier);
-    const newHFO = Math.max(300, state.marketConditions.fuelPrices.HFO * (1 + priceChange) * eventMultiplier);
-    
-    // Determine trend
-    const priceDiff = newVLSFO - state.marketConditions.fuelPrices.VLSFO;
-    const trend = priceDiff > 10 ? 'rising' : priceDiff < -10 ? 'falling' : 'stable';
-    
+    const fuel = state.marketConditions.fuelPrices;
+
+    // Prices wander around a level set by season, tension and events.
+    const eventMultiplier = state.newGlobalEvents
+      .filter(e => e.effects.fuelPriceMultiplier && state.simulationDay >= e.startDay && state.simulationDay < e.startDay + e.duration)
+      .reduce((m, e) => m * (e.effects.fuelPriceMultiplier ?? 1), 1);
+    const target =
+      COST_FACTORS.fuel.VLSFO *
+      factors.seasonalMultipliers[state.marketConditions.season] *
+      (1 + (state.marketConditions.geopoliticalTension - 30) * factors.geopoliticalMultiplier * 3) *
+      eventMultiplier;
+    const noise = (Math.random() - 0.5) * factors.baseVolatility * 1.2;
+    const VLSFO = Math.min(1400, Math.max(350, fuel.VLSFO + (target - fuel.VLSFO) * 0.02 + fuel.VLSFO * noise));
+    const HFO = VLSFO * (COST_FACTORS.fuel.HFO / COST_FACTORS.fuel.VLSFO);
+
+    const priceDiff = VLSFO - fuel.VLSFO;
     set(prevState => ({
       marketConditions: {
         ...prevState.marketConditions,
         fuelPrices: {
-          VLSFO: newVLSFO,
-          HFO: newHFO,
-          trend,
-          volatility: Math.min(100, Math.max(10, prevState.marketConditions.fuelPrices.volatility + (Math.random() - 0.5) * 5)),
+          VLSFO,
+          HFO,
+          trend: priceDiff > 5 ? 'rising' : priceDiff < -5 ? 'falling' : 'stable',
+          volatility: fuel.volatility,
           lastChange: state.simulationDay,
         },
       },
-      fuelPrice: newVLSFO, // Update global fuel price
+      fuelPrice: VLSFO,
+    }));
+  },
+
+  updateFreightMarket: () => {
+    const state = get();
+    const day = state.simulationDay;
+    const { economicClimate, season } = state.marketConditions;
+
+    // Cargo demand per segment, as a small tilt around normal: the freight
+    // market's own supply/demand turns small tilts into big rate swings.
+    const activeEvents = state.newGlobalEvents.filter(
+      e => e.type !== 'seasonal_demand' && day >= e.startDay && day < e.startDay + e.duration,
+    );
+    const demand = Object.fromEntries(
+      MARKET_SEGMENTS.map(segment => {
+        let factor =
+          1 +
+          (ECONOMIC_CYCLES[economicClimate].demandMultiplier[segment] - 1) * 0.2 +
+          (SEASONAL_DEMAND_MULTIPLIERS[season][segment] - 1) * 0.1;
+        for (const e of activeEvents) {
+          factor += ((e.effects.demandMultiplier?.[segment] ?? 1) - 1) * 0.2;
+          // Blocked canals and longer detours tie up ships, like extra cargo.
+          factor += ((e.effects.contractPriceMultiplier ?? 1) - 1) * 0.1;
+        }
+        return [segment, factor];
+      }),
+    ) as Record<MarketSegment, number>;
+
+    const before = state.freightMarket;
+    const after = stepMarket(before, day, demand);
+
+    const news: { text: string; up: boolean }[] = [];
+    for (const segment of MARKET_SEGMENTS) {
+      const was = before.segments[segment].index;
+      const now = after.segments[segment].index;
+      const label = SEGMENT_LABEL[segment];
+      const crossed = (level: number) => (was < level && now >= level) || (was >= level && now < level);
+      if (crossed(2) && now >= 2) news.push({ text: `${label}の運賃が平年の2倍を超えました。船が足りていません`, up: true });
+      else if (crossed(1.5) && now >= 1.5) news.push({ text: `${label}の運賃が高騰しています（平年の1.5倍）`, up: true });
+      else if (crossed(0.7) && now < 0.7) news.push({ text: `${label}の運賃が低迷しています（平年の7割を割り込み）。船余りです`, up: false });
+      else if (crossed(1) && now >= 1 && was < 0.85) news.push({ text: `${label}の運賃が平年並みに戻りました`, up: true });
+    }
+
+    set(prev => ({
+      freightMarket: after,
+      marketNews: news.length
+        ? [
+            ...prev.marketNews,
+            ...news.map(n => ({
+              id: `news-${uuidv4()}`,
+              type: 'market_entry' as const,
+              companyId: 'global',
+              message: n.text,
+              day,
+              impact: n.up ? ('positive' as const) : ('negative' as const),
+            })),
+          ]
+        : prev.marketNews,
     }));
   },
 
   triggerEconomicCycles: () => {
     const state = get();
     
-    // Economic cycle transitions (every ~2-3 years with some randomness)
-    if (state.simulationDay % 730 === 0 && Math.random() < 0.3) {
+    // The world economy may turn every half year; freight markets amplify it.
+    if (state.simulationDay > 0 && state.simulationDay % 180 === 0 && Math.random() < 0.7) {
       const currentClimate = state.marketConditions.economicClimate;
       let newClimate = currentClimate;
       
@@ -1051,30 +1111,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
       newGlobalEvents: prevState.newGlobalEvents.filter(event => 
         state.simulationDay < event.startDay + event.duration
       ),
-    }));
-  },
-
-  updateMarketConditions: () => {
-    const state = get();
-    
-    // Update fuel prices based on global events
-    let fuelMultiplier = 1.0;
-    state.newGlobalEvents.forEach(event => {
-      if (event.effects.fuelPriceMultiplier) {
-        fuelMultiplier *= event.effects.fuelPriceMultiplier;
-      }
-    });
-    
-    set(prevState => ({
-      marketConditions: {
-        ...prevState.marketConditions,
-        fuelPrices: {
-          VLSFO: COST_FACTORS.fuel.VLSFO * fuelMultiplier,
-          HFO: COST_FACTORS.fuel.HFO * fuelMultiplier,
-          trend: fuelMultiplier > 1.1 ? 'rising' : fuelMultiplier < 0.9 ? 'falling' : 'stable',
-        },
-      },
-      fuelPrice: COST_FACTORS.fuel.VLSFO * fuelMultiplier,
     }));
   },
 

@@ -9,12 +9,13 @@ import { CompanySetupModal } from './components/CompanySetupModal';
 import { RankingPanel } from './components/RankingPanel';
 import { MarketNewsPanel } from './components/MarketNewsPanel';
 import { WorldMap } from './components/WorldMap';
+import { MarketPanel } from './components/MarketPanel';
 import { useGameStore } from './store/gameStore';
 import { useGameTick } from './hooks/useGameTick';
-import { BarChart3, Kanban } from 'lucide-react';
+import { BarChart3, Kanban, LineChart } from 'lucide-react';
 import { Globe, Trophy, DollarSign, Users, Newspaper, Map as MapIcon } from 'lucide-react';
 
-type ActiveTab = 'kanban' | 'map' | 'dashboard' | 'events' | 'achievements' | 'finance' | 'ranking' | 'news';
+type ActiveTab = 'kanban' | 'map' | 'market' | 'dashboard' | 'events' | 'achievements' | 'finance' | 'ranking' | 'news';
 
 function App() {
   const { initializeGame } = useGameStore();
@@ -51,6 +52,9 @@ function App() {
           break;
         case 'm':
           setActiveTab('map');
+          break;
+        case 's':
+          setActiveTab('market');
           break;
         case 'd':
           setActiveTab('dashboard');
@@ -110,6 +114,17 @@ function App() {
             >
               <MapIcon size={16} />
               世界地図 (M)
+            </button>
+            <button
+              onClick={() => setActiveTab('market')}
+              className={`flex items-center gap-2 py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'market'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+              }`}
+            >
+              <LineChart size={16} />
+              市況 (S)
             </button>
             <button
               onClick={() => setActiveTab('dashboard')}
@@ -185,6 +200,7 @@ function App() {
       <main className="max-w-7xl mx-auto">
         {activeTab === 'kanban' && <KanbanBoard />}
         {activeTab === 'map' && <WorldMap />}
+        {activeTab === 'market' && <MarketPanel />}
         {activeTab === 'dashboard' && <Dashboard />}
         {activeTab === 'events' && (
           <div className="p-6">
@@ -217,7 +233,7 @@ function App() {
       <footer className="bg-slate-800 text-white py-6 mt-16">
         <div className="max-w-7xl mx-auto px-6 text-center">
           <p className="text-slate-400">
-            Maritime Tycoon v4.0 | キーボードショートカット: 1-3(速度), 0(停止), K(運航管理), M(世界地図), D(ダッシュボード), E(世界情勢), A(実績), F(財務), R(ランキング), N(ニュース)
+            Maritime Tycoon v4.0 | キーボードショートカット: 1-3(速度), 0(停止), K(運航管理), M(世界地図), S(市況), D(ダッシュボード), E(世界情勢), A(実績), F(財務), R(ランキング), N(ニュース)
           </p>
         </div>
       </footer>
