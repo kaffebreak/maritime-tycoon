@@ -1,7 +1,5 @@
 import { geoCircle, geoGraticule10, geoNaturalEarth1, geoPath } from 'd3-geo';
-import { feature } from 'topojson-client';
-import type { Topology, GeometryCollection } from 'topojson-specification';
-import landTopology from 'world-atlas/land-110m.json';
+import { landFeature } from '../../constants/land';
 import { LonLat } from '../../constants/seaRoutes';
 import { CargoType } from '../../types/game';
 
@@ -22,8 +20,7 @@ const projection = geoNaturalEarth1()
   .fitSize([MAP_WIDTH, MAP_HEIGHT], { type: 'Sphere' });
 export const mapPath = geoPath(projection);
 
-const topology = landTopology as unknown as Topology<{ land: GeometryCollection }>;
-export const landPath = mapPath(feature(topology, topology.objects.land)) ?? '';
+export const landPath = mapPath(landFeature) ?? '';
 export const graticulePath = mapPath(geoGraticule10()) ?? '';
 export const spherePath = mapPath({ type: 'Sphere' }) ?? '';
 
@@ -32,6 +29,12 @@ export const TOP_Y = projection([CENTER_LON, 75])![1];
 export const BOTTOM_Y = projection([CENTER_LON, -62])![1];
 
 export const project = (point: LonLat) => projection(point) ?? [0, 0];
+
+// Map coordinates back to [lon, lat], or null off the globe.
+export const unproject = (x: number, y: number): LonLat | null => {
+  const point = projection.invert?.([x, y]);
+  return point && Math.abs(point[0]) <= 180 && Math.abs(point[1]) <= 90 ? (point as LonLat) : null;
+};
 
 export const linePath = (points: LonLat[]) => mapPath({ type: 'LineString', coordinates: points }) ?? '';
 

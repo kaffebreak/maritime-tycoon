@@ -12,6 +12,7 @@ import {
   project,
   spherePath,
   TOP_Y,
+  unproject,
 } from './mapProjection';
 
 const STORM_COLOR: Record<Storm['kind'], string> = {
@@ -105,19 +106,34 @@ export const PortMarker: React.FC<{ port: Port; children?: React.ReactNode }> = 
   );
 };
 
-export const BaseMap: React.FC<{ children: React.ReactNode; onClick?: () => void; className?: string }> = ({
-  children,
-  onClick,
-  className = '',
-}) => (
-  <svg
-    viewBox={`0 ${TOP_Y} ${MAP_WIDTH} ${BOTTOM_Y - TOP_Y}`}
-    className={`w-full h-auto block bg-sky-100 ${className}`}
-    onClick={onClick}
-  >
-    <path d={spherePath} fill="#bfdbfe" />
-    <path d={graticulePath} fill="none" stroke="#93c5fd" strokeWidth={0.5} />
-    <path d={landPath} fill="#ecfccb" stroke="#84cc16" strokeWidth={0.6} />
-    {children}
-  </svg>
-);
+interface BaseMapProps {
+  children: React.ReactNode;
+  onClick?: () => void;
+  // Called with the [lon, lat] of a click on the map.
+  onMapClick?: (point: LonLat) => void;
+  className?: string;
+}
+
+export const BaseMap: React.FC<BaseMapProps> = ({ children, onClick, onMapClick, className = '' }) => {
+  const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    onClick?.();
+    const matrix = onMapClick && e.currentTarget.getScreenCTM()?.inverse();
+    if (!matrix) return;
+    const { x, y } = new DOMPoint(e.clientX, e.clientY).matrixTransform(matrix);
+    const point = unproject(x, y);
+    if (point) onMapClick!(point);
+  };
+
+  return (
+    <svg
+      viewBox={`0 ${TOP_Y} ${MAP_WIDTH} ${BOTTOM_Y - TOP_Y}`}
+      className={`w-full h-auto block bg-sky-100 ${className}`}
+      onClick={handleClick}
+    >
+      <path d={spherePath} fill="#bfdbfe" />
+      <path d={graticulePath} fill="none" stroke="#93c5fd" strokeWidth={0.5} />
+      <path d={landPath} fill="#ecfccb" stroke="#84cc16" strokeWidth={0.6} />
+      {children}
+    </svg>
+  );
+};
